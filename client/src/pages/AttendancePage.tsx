@@ -10,10 +10,28 @@ import {
   Filter
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Input } from '../components/common/UIComponents';
-import { attendance } from '../data/mockData';
+import { attendanceService, AttendanceLog } from '../services/attendanceService';
+import { useEffect, useState } from 'react';
 
 export default function AttendancePage() {
   const { t } = useTranslation();
+  const [logs, setLogs] = useState<AttendanceLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadLogs();
+  }, []);
+
+  const loadLogs = async () => {
+    try {
+      const data = await attendanceService.getAll();
+      setLogs(data);
+    } catch (error) {
+      console.error('Failed to load attendance logs:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -120,14 +138,24 @@ export default function AttendancePage() {
                 </tr>
               </thead>
               <tbody>
-                {attendance.map((record) => (
+                {loading ? (
+                  <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">Loading logs...</td></tr>
+                ) : logs.length === 0 ? (
+                  <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">No attendance records found.</td></tr>
+                ) : logs.map((record) => (
                   <tr key={record.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-3 font-medium">{record.employeeId}</td>
-                    <td className="px-4 py-3">{record.date}</td>
-                    <td className="px-4 py-3 font-mono text-primary">{record.checkIn}</td>
-                    <td className="px-4 py-3 font-mono text-primary">{record.checkOut}</td>
-                    <td className="px-4 py-3 text-destructive font-bold">{record.late > 0 ? record.late : '-'}</td>
-                    <td className="px-4 py-3 text-emerald-500 font-bold">{record.overtime > 0 ? record.overtime : '-'}</td>
+                    <td className="px-4 py-3 font-medium">
+                      {record.employees ? `${record.employees.first_name} ${record.employees.last_name}` : record.employee_id}
+                    </td>
+                    <td className="px-4 py-3">{new Date(record.date).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 font-mono text-primary">
+                      {record.check_in ? new Date(record.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-primary">
+                      {record.check_out ? new Date(record.check_out).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-destructive font-bold">{record.late_minutes > 0 ? `${record.late_minutes}m` : '-'}</td>
+                    <td className="px-4 py-3 text-emerald-500 font-bold">{record.overtime_minutes > 0 ? `${record.overtime_minutes}m` : '-'}</td>
                     <td className="px-4 py-3">
                       <Badge variant={getStatusColor(record.status) as any}>
                         {record.status}

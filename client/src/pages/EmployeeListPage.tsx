@@ -12,22 +12,41 @@ import {
   User
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Input, Badge } from '../components/common/UIComponents';
-import { employees } from '../data/mockData';
+import { employeeService, Employee } from '../services/employeeService';
+import { useEffect } from 'react';
 
 export default function EmployeeListPage() {
   const { t } = useTranslation();
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('All');
 
+  useEffect(() => {
+    loadEmployees();
+  }, []);
+
+  const loadEmployees = async () => {
+    try {
+      const data = await employeeService.getAll();
+      setEmployees(data);
+    } catch (error) {
+      console.error('Failed to load employees:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const fullName = `${emp.first_name} ${emp.last_name}`;
+    const matchesSearch = fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          emp.id.toLowerCase().includes(searchTerm.toLowerCase());
+                          emp.employee_id.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDept = filterDept === 'All' || emp.department === filterDept;
     return matchesSearch && matchesDept;
   });
 
-  const departments = ['All', ...Array.from(new Set(employees.map(e => e.department)))];
+  const departments = ['All', ...Array.from(new Set(employees.map(e => e.department || 'Unassigned')))];
 
   return (
     <div className="space-y-6">
@@ -78,18 +97,20 @@ export default function EmployeeListPage() {
 
       {/* Employee Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredEmployees.map((employee) => (
+        {loading ? (
+          <div className="col-span-full text-center py-12 text-muted-foreground">Loading employees...</div>
+        ) : filteredEmployees.length === 0 ? (
+          <div className="col-span-full text-center py-12 text-muted-foreground">No employees found.</div>
+        ) : filteredEmployees.map((employee) => (
           <Card key={employee.id} className="group hover:border-primary/50 transition-colors">
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-4">
-                  <img 
-                    src={employee.avatar} 
-                    alt={employee.name} 
-                    className="w-12 h-12 rounded-full border border-white/10 object-cover"
-                  />
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg border border-white/10">
+                    {employee.first_name[0]}{employee.last_name[0]}
+                  </div>
                   <div>
-                    <h3 className="font-bold text-foreground">{employee.name}</h3>
+                    <h3 className="font-bold text-foreground">{employee.first_name} {employee.last_name}</h3>
                     <p className="text-xs text-muted-foreground">{employee.designation}</p>
                   </div>
                 </div>
@@ -101,7 +122,7 @@ export default function EmployeeListPage() {
               <div className="space-y-3 mb-6">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <User size={14} className="shrink-0" />
-                  <span>{employee.id}</span>
+                  <span>{employee.employee_id}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Mail size={14} className="shrink-0" />
