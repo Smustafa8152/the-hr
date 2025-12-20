@@ -16,7 +16,10 @@ export const documentService = {
     try {
       const response = await api.get('/documents?select=*&order=created_at.desc');
       return response.data as Document[];
-    } catch (error) {
+    } catch (error: any) {
+      if (error.response && error.response.status === 404) {
+        return [];
+      }
       console.error('Error fetching documents:', error);
       return [];
     }

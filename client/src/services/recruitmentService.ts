@@ -15,7 +15,10 @@ export const recruitmentService = {
     try {
       const response = await api.get('/candidates?select=*&order=created_at.desc');
       return response.data as Candidate[];
-    } catch (error) {
+    } catch (error: any) {
+      if (error.response && error.response.status === 404) {
+        return [];
+      }
       console.error('Error fetching candidates:', error);
       return [];
     }

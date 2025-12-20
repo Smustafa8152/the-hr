@@ -36,16 +36,19 @@ api.interceptors.response.use(
   error => {
     // Log detailed error information
     if (error.response) {
-      console.error('API Error Response:', {
-        status: error.response.status,
-        data: error.response.data,
-        headers: error.response.headers,
-        config: {
-          url: error.config.url,
-          method: error.config.method,
-          data: error.config.data
-        }
-      });
+      // Skip logging for 404 (Not Found) which often means missing table or record
+      if (error.response.status !== 404) {
+        console.error('API Error Response:', {
+          status: error.response.status,
+          data: error.response.data,
+          headers: error.response.headers,
+          config: {
+            url: error.config.url,
+            method: error.config.method,
+            data: error.config.data
+          }
+        });
+      }
     } else if (error.request) {
       console.error('API No Response:', error.request);
     } else {

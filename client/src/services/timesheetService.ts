@@ -15,7 +15,10 @@ export const timesheetService = {
     try {
       const response = await api.get(`/timesheets?employee_id=eq.${employeeId}&week=eq.${week}&select=*`);
       return response.data as TimesheetEntry[];
-    } catch (error) {
+    } catch (error: any) {
+      if (error.response && error.response.status === 404) {
+        return [];
+      }
       console.error('Error fetching timesheets:', error);
       return [];
     }

@@ -15,7 +15,10 @@ export const payrollService = {
     try {
       const response = await api.get('/payroll_cycles?select=*&order=created_at.desc');
       return response.data as PayrollCycle[];
-    } catch (error) {
+    } catch (error: any) {
+      if (error.response && error.response.status === 404) {
+        return [];
+      }
       console.error('Error fetching payroll cycles:', error);
       return [];
     }
