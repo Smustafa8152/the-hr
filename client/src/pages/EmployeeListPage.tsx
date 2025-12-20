@@ -1,0 +1,134 @@
+import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { 
+  Search, 
+  Plus, 
+  Filter, 
+  MoreHorizontal, 
+  Mail, 
+  Phone, 
+  MapPin,
+  FileText,
+  User
+} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, Button, Input, Badge } from '../components/common/UIComponents';
+import { employees } from '../data/mockData';
+
+export default function EmployeeListPage() {
+  const { t } = useTranslation();
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterDept, setFilterDept] = useState('All');
+
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          emp.id.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDept = filterDept === 'All' || emp.department === filterDept;
+    return matchesSearch && matchesDept;
+  });
+
+  const departments = ['All', ...Array.from(new Set(employees.map(e => e.department)))];
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold font-heading tracking-tight text-foreground">{t('employees.title')}</h1>
+          <p className="text-muted-foreground mt-1">Manage your organization's workforce.</p>
+        </div>
+        <Button variant="primary">
+          <Plus size={18} className="mr-2 rtl:ml-2 rtl:mr-0" />
+          {t('employees.addEmployee')}
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search size={18} className="absolute left-3 rtl:right-3 rtl:left-auto top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input 
+                placeholder={t('common.search')} 
+                className="pl-10 rtl:pr-10 rtl:pl-3"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
+              {departments.map(dept => (
+                <Button 
+                  key={dept}
+                  variant={filterDept === dept ? 'primary' : 'outline'}
+                  size="sm"
+                  onClick={() => setFilterDept(dept)}
+                  className="whitespace-nowrap"
+                >
+                  {dept}
+                </Button>
+              ))}
+            </div>
+            <Button variant="outline" size="icon">
+              <Filter size={18} />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Employee Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredEmployees.map((employee) => (
+          <Card key={employee.id} className="group hover:border-primary/50 transition-colors">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-4">
+                  <img 
+                    src={employee.avatar} 
+                    alt={employee.name} 
+                    className="w-12 h-12 rounded-full border border-white/10 object-cover"
+                  />
+                  <div>
+                    <h3 className="font-bold text-foreground">{employee.name}</h3>
+                    <p className="text-xs text-muted-foreground">{employee.designation}</p>
+                  </div>
+                </div>
+                <Badge variant={employee.status === 'Active' ? 'success' : 'warning'}>
+                  {employee.status}
+                </Badge>
+              </div>
+              
+              <div className="space-y-3 mb-6">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <User size={14} className="shrink-0" />
+                  <span>{employee.id}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Mail size={14} className="shrink-0" />
+                  <span className="truncate">{employee.email}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Phone size={14} className="shrink-0" />
+                  <span>{employee.phone}</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <MapPin size={14} className="shrink-0" />
+                  <span>{employee.department}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-4 border-t border-white/5">
+                <Button variant="outline" size="sm" className="flex-1">
+                  {t('common.view')}
+                </Button>
+                <Button variant="ghost" size="icon">
+                  <MoreHorizontal size={16} />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}

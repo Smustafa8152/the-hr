@@ -7,6 +7,9 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./context/LanguageContext";
 import { MainLayout } from "./components/layout/MainLayout";
 import DashboardPage from "./pages/DashboardPage";
+import EmployeeListPage from "./pages/EmployeeListPage";
+import AttendancePage from "./pages/AttendancePage";
+import PayrollPage from "./pages/PayrollPage";
 import './utils/i18n';
 
 // Placeholder pages for routes not yet implemented
@@ -23,10 +26,10 @@ function Router() {
     <MainLayout>
       <Switch>
         <Route path="/" component={DashboardPage} />
-        <Route path="/employees" component={() => <PlaceholderPage title="Employee Management" />} />
-        <Route path="/attendance" component={() => <PlaceholderPage title="Time & Attendance" />} />
+        <Route path="/employees" component={EmployeeListPage} />
+        <Route path="/attendance" component={AttendancePage} />
+        <Route path="/payroll" component={PayrollPage} />
         <Route path="/leaves" component={() => <PlaceholderPage title="Leave Management" />} />
-        <Route path="/payroll" component={() => <PlaceholderPage title="Payroll Processing" />} />
         <Route path="/recruitment" component={() => <PlaceholderPage title="Recruitment Pipeline" />} />
         <Route path="/documents" component={() => <PlaceholderPage title="Document Management" />} />
         <Route path="/analytics" component={() => <PlaceholderPage title="Analytics & Reports" />} />
