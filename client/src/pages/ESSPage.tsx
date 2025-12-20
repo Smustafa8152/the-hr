@@ -1,8 +1,45 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, Calendar, DollarSign, FileText, Send, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '../components/common/UIComponents';
+import { essService } from '../services/essService';
+import { leaveService } from '../services/leaveService';
 
 export default function ESSPage() {
+  const [stats, setStats] = useState({
+    checkInTime: '--:--',
+    leaveBalance: 0,
+    nextPayday: '-',
+    pendingRequests: 0
+  });
+  const [requests, setRequests] = useState<any[]>([]);
+  const [payslips, setPayslips] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Mock logged in user ID
+  const currentUserId = '1'; 
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [statsData, requestsData, payslipsData] = await Promise.all([
+        essService.getDashboardStats(currentUserId),
+        essService.getMyRequests(currentUserId),
+        essService.getPayslips(currentUserId)
+      ]);
+      
+      setStats(statsData);
+      setRequests(requestsData);
+      setPayslips(payslipsData);
+    } catch (error) {
+      console.error('Failed to load ESS data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -10,7 +47,7 @@ export default function ESSPage() {
           <h1 className="text-3xl font-bold font-heading">My Dashboard</h1>
           <p className="text-muted-foreground">Welcome back, Sarah</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => window.location.href = '/leaves'}>
           <Send size={16} /> Request Leave
         </Button>
       </div>
@@ -24,7 +61,7 @@ export default function ESSPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Check-in Time</p>
-              <p className="text-2xl font-bold font-mono">08:02 AM</p>
+              <p className="text-2xl font-bold font-mono">{stats.checkInTime}</p>
             </div>
           </CardContent>
         </Card>
@@ -35,7 +72,7 @@ export default function ESSPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Leave Balance</p>
-              <p className="text-2xl font-bold font-mono">22 Days</p>
+              <p className="text-2xl font-bold font-mono">{stats.leaveBalance} Days</p>
             </div>
           </CardContent>
         </Card>
@@ -46,7 +83,7 @@ export default function ESSPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Next Payday</p>
-              <p className="text-2xl font-bold font-mono">Jan 25</p>
+              <p className="text-2xl font-bold font-mono">{stats.nextPayday}</p>
             </div>
           </CardContent>
         </Card>
@@ -57,7 +94,7 @@ export default function ESSPage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Pending Requests</p>
-              <p className="text-2xl font-bold font-mono">1</p>
+              <p className="text-2xl font-bold font-mono">{stats.pendingRequests}</p>
             </div>
           </CardContent>
         </Card>
@@ -69,11 +106,7 @@ export default function ESSPage() {
           <CardHeader><CardTitle>Recent Payslips</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {[
-                { month: 'December 2025', amount: '1,445.000 KD', status: 'Paid' },
-                { month: 'November 2025', amount: '1,445.000 KD', status: 'Paid' },
-                { month: 'October 2025', amount: '1,445.000 KD', status: 'Paid' },
-              ].map((slip, i) => (
+              {payslips.map((slip, i) => (
                 <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-lg hover:bg-white/10 transition-colors">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded bg-primary/20 flex items-center justify-center text-primary">
@@ -96,15 +129,17 @@ export default function ESSPage() {
           <CardHeader><CardTitle>My Requests</CardTitle></CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {[
-                { type: 'Annual Leave', date: 'Dec 24 - Dec 26', status: 'Pending' },
-                { type: 'Salary Certificate', date: 'Dec 10', status: 'Approved' },
-                { type: 'Sick Leave', date: 'Nov 15', status: 'Approved' },
-              ].map((req, i) => (
+              {loading ? (
+                <div className="text-center py-4 text-muted-foreground">Loading...</div>
+              ) : requests.length === 0 ? (
+                <div className="text-center py-4 text-muted-foreground">No recent requests.</div>
+              ) : requests.slice(0, 5).map((req, i) => (
                 <div key={i} className="flex items-center justify-between p-4 bg-white/5 rounded-lg">
                   <div>
-                    <p className="font-bold">{req.type}</p>
-                    <p className="text-xs text-muted-foreground">{req.date}</p>
+                    <p className="font-bold">{req.leave_type}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(req.start_date).toLocaleDateString()} - {new Date(req.end_date).toLocaleDateString()}
+                    </p>
                   </div>
                   <Badge variant={req.status === 'Approved' ? 'success' : req.status === 'Pending' ? 'warning' : 'destructive'}>
                     {req.status}
