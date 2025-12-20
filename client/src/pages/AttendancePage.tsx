@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
   Clock, 
@@ -7,29 +7,89 @@ import {
   CheckCircle, 
   XCircle,
   Calendar as CalendarIcon,
-  Filter
+  Filter,
+  Plus
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Input } from '../components/common/UIComponents';
+import Modal from '../components/common/Modal';
 import { attendanceService, AttendanceLog } from '../services/attendanceService';
-import { useEffect, useState } from 'react';
+import { employeeService, Employee } from '../services/employeeService';
 
 export default function AttendancePage() {
   const { t } = useTranslation();
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Form State
+  const [newPunch, setNewPunch] = useState({
+    employee_id: '',
+    date: new Date().toISOString().split('T')[0],
+    check_in: '',
+    check_out: '',
+    status: 'Present'
+  });
 
   useEffect(() => {
-    loadLogs();
+    loadData();
   }, []);
 
-  const loadLogs = async () => {
+  const loadData = async () => {
     try {
-      const data = await attendanceService.getAll();
-      setLogs(data);
+      const [logsData, employeesData] = await Promise.all([
+        attendanceService.getAll(),
+        employeeService.getAll()
+      ]);
+      setLogs(logsData);
+      setEmployees(employeesData);
     } catch (error) {
-      console.error('Failed to load attendance logs:', error);
+      console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAddPunch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // Calculate late/overtime logic here if needed
+      const checkInTime = new Date(`${newPunch.date}T${newPunch.check_in}`);
+      const checkOutTime = newPunch.check_out ? new Date(`${newPunch.date}T${newPunch.check_out}`) : null;
+      
+      let status = newPunch.status;
+      let lateMinutes = 0;
+      
+      // Simple logic: Late if after 9:00 AM
+      if (checkInTime.getHours() > 9 || (checkInTime.getHours() === 9 && checkInTime.getMinutes() > 0)) {
+        status = 'Late';
+        lateMinutes = (checkInTime.getHours() - 9) * 60 + checkInTime.getMinutes();
+      }
+
+      await attendanceService.createPunch({
+        employee_id: newPunch.employee_id,
+        date: newPunch.date,
+        check_in: checkInTime.toISOString(),
+        check_out: checkOutTime ? checkOutTime.toISOString() : undefined,
+        status,
+        late_minutes: lateMinutes,
+        overtime_minutes: 0,
+        is_regularized: true
+      });
+      
+      await loadData();
+      setIsModalOpen(false);
+      // Reset form
+      setNewPunch({
+        employee_id: '',
+        date: new Date().toISOString().split('T')[0],
+        check_in: '',
+        check_out: '',
+        status: 'Present'
+      });
+    } catch (error) {
+      console.error('Failed to add punch:', error);
+      alert('Failed to add punch. Please check console.');
     }
   };
 
@@ -56,11 +116,69 @@ export default function AttendancePage() {
             <CalendarIcon size={18} className="mr-2 rtl:ml-2 rtl:mr-0" />
             Dec 2025
           </Button>
-          <Button variant="primary">
-            {t('attendance.regularization')}
+          <Button variant="primary" onClick={() => setIsModalOpen(true)}>
+            <Plus size={18} className="mr-2 rtl:ml-2 rtl:mr-0" />
+            Add Punch
           </Button>
         </div>
       </div>
+
+      {/* Add Punch Modal */}
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Add Manual Punch">
+        <form onSubmit={handleAddPunch} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Employee</label>
+            <select 
+              className="w-full h-10 bg-white/5 border border-white/10 rounded-md px-3 text-sm focus:outline-none focus:border-primary"
+              value={newPunch.employee_id}
+              onChange={e => setNewPunch({...newPunch, employee_id: e.target.value})}
+              required
+            >
+              <option value="">Select Employee</option>
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.first_name} {emp.last_name} ({emp.employee_id})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Date</label>
+            <Input 
+              type="date"
+              value={newPunch.date}
+              onChange={e => setNewPunch({...newPunch, date: e.target.value})}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Check In</label>
+              <Input 
+                type="time"
+                value={newPunch.check_in}
+                onChange={e => setNewPunch({...newPunch, check_in: e.target.value})}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Check Out</label>
+              <Input 
+                type="time"
+                value={newPunch.check_out}
+                onChange={e => setNewPunch({...newPunch, check_out: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <div className="pt-4 flex justify-end gap-3">
+            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>{t('common.cancel')}</Button>
+            <Button type="submit">{t('common.save')}</Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -71,7 +189,9 @@ export default function AttendancePage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Present</p>
-              <p className="text-2xl font-bold text-emerald-500">42</p>
+              <p className="text-2xl font-bold text-emerald-500">
+                {logs.filter(l => l.status === 'Present').length}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -82,7 +202,9 @@ export default function AttendancePage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Late</p>
-              <p className="text-2xl font-bold text-amber-500">5</p>
+              <p className="text-2xl font-bold text-amber-500">
+                {logs.filter(l => l.status === 'Late').length}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -93,7 +215,9 @@ export default function AttendancePage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Absent</p>
-              <p className="text-2xl font-bold text-destructive">3</p>
+              <p className="text-2xl font-bold text-destructive">
+                {logs.filter(l => l.status === 'Absent').length}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -104,7 +228,9 @@ export default function AttendancePage() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">On Leave</p>
-              <p className="text-2xl font-bold text-blue-500">2</p>
+              <p className="text-2xl font-bold text-blue-500">
+                {logs.filter(l => l.status === 'On Leave').length}
+              </p>
             </div>
           </CardContent>
         </Card>

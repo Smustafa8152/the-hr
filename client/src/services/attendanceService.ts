@@ -64,24 +64,66 @@ export const attendanceService = {
   },
 
   async getByEmployee(employeeId: string) {
-    const { data, error } = await supabase
-      .from('attendance_logs')
-      .select('*')
-      .eq('employee_id', employeeId)
-      .order('date', { ascending: false });
-      
-    if (error) throw error;
-    return data as AttendanceLog[];
+    try {
+      const { data, error } = await supabase
+        .from('attendance_logs')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .order('date', { ascending: false });
+        
+      if (error) throw error;
+      return data as AttendanceLog[];
+    } catch (error) {
+      console.error('Error fetching employee attendance:', error);
+      return [];
+    }
   },
 
   async createPunch(log: Partial<AttendanceLog>) {
-    const { data, error } = await supabase
-      .from('attendance_logs')
-      .insert([log])
-      .select()
-      .single();
-      
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase
+        .from('attendance_logs')
+        .insert([log])
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error creating punch:', error);
+      throw error;
+    }
+  },
+
+  async updatePunch(id: string, updates: Partial<AttendanceLog>) {
+    try {
+      const { data, error } = await supabase
+        .from('attendance_logs')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Error updating punch:', error);
+      throw error;
+    }
+  },
+
+  async deletePunch(id: string) {
+    try {
+      const { error } = await supabase
+        .from('attendance_logs')
+        .delete()
+        .eq('id', id);
+        
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error('Error deleting punch:', error);
+      throw error;
+    }
   }
 };
