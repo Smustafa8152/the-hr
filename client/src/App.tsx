@@ -17,6 +17,9 @@ import ESSPage from "./pages/ESSPage";
 import TimesheetsPage from "./pages/TimesheetsPage";
 import LeavesPage from "./pages/LeavesPage";
 import DocumentsPage from "./pages/DocumentsPage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import AdminPage from "./pages/AdminPage";
+import SettingsPage from "./pages/SettingsPage";
 import './utils/i18n';
 
 // Placeholder pages for routes not yet implemented
@@ -43,9 +46,9 @@ function Router() {
         <Route path="/ess" component={ESSPage} />
         <Route path="/timesheets" component={TimesheetsPage} />
         <Route path="/documents" component={DocumentsPage} />
-        <Route path="/analytics" component={() => <PlaceholderPage title="Analytics & Reports" />} />
-        <Route path="/admin" component={() => <PlaceholderPage title="Admin & Governance" />} />
-        <Route path="/settings" component={() => <PlaceholderPage title="System Settings" />} />
+        <Route path="/analytics" component={AnalyticsPage} />
+        <Route path="/admin" component={AdminPage} />
+        <Route path="/settings" component={SettingsPage} />
         
         {/* Fallback */}
         <Route component={NotFound} />
