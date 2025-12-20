@@ -10,6 +10,7 @@ import DashboardPage from "./pages/DashboardPage";
 import EmployeeListPage from "./pages/EmployeeListPage";
 import AttendancePage from "./pages/AttendancePage";
 import PayrollPage from "./pages/PayrollPage";
+import SetupPage from "./pages/SetupPage";
 import './utils/i18n';
 
 // Placeholder pages for routes not yet implemented
@@ -29,6 +30,7 @@ function Router() {
         <Route path="/employees" component={EmployeeListPage} />
         <Route path="/attendance" component={AttendancePage} />
         <Route path="/payroll" component={PayrollPage} />
+        <Route path="/setup" component={SetupPage} />
         <Route path="/leaves" component={() => <PlaceholderPage title="Leave Management" />} />
         <Route path="/recruitment" component={() => <PlaceholderPage title="Recruitment Pipeline" />} />
         <Route path="/documents" component={() => <PlaceholderPage title="Document Management" />} />
