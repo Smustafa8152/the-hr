@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { 
   Users, 
   Clock, 
@@ -25,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '../comp
 
 const KPICard = ({ title, value, change, trend, icon: Icon, color }: any) => (
   <Card className="relative overflow-hidden group">
-    <div className={`absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity ${color}`}>
+    <div className={`absolute top-0 right-0 rtl:left-0 rtl:right-auto p-4 opacity-10 group-hover:opacity-20 transition-opacity ${color}`}>
       <Icon size={64} />
     </div>
     <CardContent className="p-6">
@@ -65,21 +66,23 @@ const departmentData = [
 ];
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
+
   return (
     <div className="space-y-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold font-heading tracking-tight text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Welcome back, Admin. Here's what's happening today.</p>
+          <h1 className="text-3xl font-bold font-heading tracking-tight text-foreground">{t('dashboard.title')}</h1>
+          <p className="text-muted-foreground mt-1">{t('common.welcome')}, Admin. {t('dashboard.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           <Button variant="outline" size="sm">
-            <Calendar size={16} className="mr-2" />
+            <Calendar size={16} className="mr-2 rtl:ml-2 rtl:mr-0" />
             Dec 20, 2025
           </Button>
           <Button variant="primary" size="sm">
-            Generate Report
+            {t('dashboard.generateReport')}
           </Button>
         </div>
       </div>
@@ -87,7 +90,7 @@ export default function DashboardPage() {
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard 
-          title="Total Employees" 
+          title={t('dashboard.totalEmployees')} 
           value="1,248" 
           change="+12%" 
           trend="up" 
@@ -95,7 +98,7 @@ export default function DashboardPage() {
           color="bg-blue-500" 
         />
         <KPICard 
-          title="On Time Today" 
+          title={t('dashboard.onTimeToday')} 
           value="94%" 
           change="+2.5%" 
           trend="up" 
@@ -103,7 +106,7 @@ export default function DashboardPage() {
           color="bg-emerald-500" 
         />
         <KPICard 
-          title="Pending Requests" 
+          title={t('dashboard.pendingRequests')} 
           value="23" 
           change="-5%" 
           trend="down" 
@@ -111,7 +114,7 @@ export default function DashboardPage() {
           color="bg-amber-500" 
         />
         <KPICard 
-          title="Payroll Cost" 
+          title={t('dashboard.payrollCost')} 
           value="$142k" 
           change="+8%" 
           trend="up" 
@@ -125,7 +128,7 @@ export default function DashboardPage() {
         {/* Attendance Trend */}
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Attendance Overview</CardTitle>
+            <CardTitle>{t('dashboard.attendanceOverview')}</CardTitle>
             <Button variant="ghost" size="icon"><MoreHorizontal size={16} /></Button>
           </CardHeader>
           <CardContent>
@@ -181,7 +184,7 @@ export default function DashboardPage() {
         {/* Department Distribution */}
         <Card>
           <CardHeader>
-            <CardTitle>Headcount by Dept</CardTitle>
+            <CardTitle>{t('dashboard.headcountByDept')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
@@ -218,7 +221,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
+            <CardTitle>{t('dashboard.recentActivity')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-6">
@@ -246,7 +249,7 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>System Alerts</CardTitle>
+            <CardTitle>{t('dashboard.systemAlerts')}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
