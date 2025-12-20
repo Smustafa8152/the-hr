@@ -4,6 +4,10 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: "Inter", "Cairo", sans-serif;
+  --font-heading: "Manrope", "Cairo", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -165,7 +169,16 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+  }
+  
+  /* Apply Cairo font specifically when RTL is active */
+  [dir="rtl"] body {
+    font-family: "Cairo", sans-serif;
+  }
+  
+  [dir="rtl"] h1, [dir="rtl"] h2, [dir="rtl"] h3, [dir="rtl"] h4, [dir="rtl"] h5, [dir="rtl"] h6, [dir="rtl"] .font-heading {
+    font-family: "Cairo", sans-serif;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
