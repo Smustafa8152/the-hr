@@ -116,3 +116,10 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
   }
 )
 Input.displayName = "Input"
+
+import * as TabsPrimitive from '@radix-ui/react-tabs';
+
+export const Tabs = TabsPrimitive.Root;
+export const TabsList = TabsPrimitive.List;
+export const TabsTrigger = TabsPrimitive.Trigger;
+export const TabsContent = TabsPrimitive.Content;

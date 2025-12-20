@@ -102,7 +102,11 @@ export default function EmployeeListPage() {
         ) : filteredEmployees.length === 0 ? (
           <div className="col-span-full text-center py-12 text-muted-foreground">No employees found.</div>
         ) : filteredEmployees.map((employee) => (
-          <Card key={employee.id} className="group hover:border-primary/50 transition-colors">
+          <Card 
+            key={employee.id} 
+            className="group hover:border-primary/50 transition-colors cursor-pointer"
+            onClick={() => window.location.href = `/employees/${employee.id}`}
+          >
             <CardContent className="p-6">
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-4">

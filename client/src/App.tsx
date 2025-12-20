@@ -8,6 +8,7 @@ import { LanguageProvider } from "./context/LanguageContext";
 import { MainLayout } from "./components/layout/MainLayout";
 import DashboardPage from "./pages/DashboardPage";
 import EmployeeListPage from "./pages/EmployeeListPage";
+import EmployeeDetailPage from "./pages/EmployeeDetailPage";
 import AttendancePage from "./pages/AttendancePage";
 import PayrollPage from "./pages/PayrollPage";
 import SetupPage from "./pages/SetupPage";
@@ -29,6 +30,7 @@ function Router() {
       <Switch>
         <Route path="/" component={DashboardPage} />
         <Route path="/employees" component={EmployeeListPage} />
+        <Route path="/employees/:id" component={EmployeeDetailPage} />
         <Route path="/attendance" component={AttendancePage} />
         <Route path="/payroll" component={PayrollPage} />
         <Route path="/setup" component={SetupPage} />
