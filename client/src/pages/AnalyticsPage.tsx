@@ -1,28 +1,43 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/common/UIComponents';
 import { useTranslation } from 'react-i18next';
-
-const headcountData = [
-  { name: 'Jan', employees: 1100 },
-  { name: 'Feb', employees: 1120 },
-  { name: 'Mar', employees: 1150 },
-  { name: 'Apr', employees: 1180 },
-  { name: 'May', employees: 1200 },
-  { name: 'Jun', employees: 1248 },
-];
-
-const attritionData = [
-  { name: 'Engineering', value: 12 },
-  { name: 'Sales', value: 18 },
-  { name: 'Marketing', value: 8 },
-  { name: 'HR', value: 4 },
-];
+import { analyticsService } from '../services/analyticsService';
 
 const COLORS = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b'];
 
 export default function AnalyticsPage() {
   const { t } = useTranslation();
+  const [headcountData, setHeadcountData] = useState<any[]>([]);
+  const [attritionData, setAttritionData] = useState<any[]>([]);
+  const [payrollData, setPayrollData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const [headcount, attrition, payroll] = await Promise.all([
+        analyticsService.getHeadcountGrowth(),
+        analyticsService.getAttritionByDept(),
+        analyticsService.getPayrollCostTrend()
+      ]);
+      
+      setHeadcountData(headcount);
+      setAttritionData(attrition);
+      setPayrollData(payroll);
+    } catch (error) {
+      console.error('Failed to load analytics:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="p-8 text-center text-muted-foreground">Loading analytics...</div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -92,7 +107,7 @@ export default function AnalyticsPage() {
           <CardHeader><CardTitle>{t('dashboard.payrollCost')}</CardTitle></CardHeader>
           <CardContent className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={headcountData}>
+              <BarChart data={payrollData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                 <XAxis dataKey="name" stroke="#888888" />
                 <YAxis stroke="#888888" />
@@ -100,7 +115,7 @@ export default function AnalyticsPage() {
                   contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: '8px' }}
                   itemStyle={{ color: '#fff' }}
                 />
-                <Bar dataKey="employees" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="cost" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
