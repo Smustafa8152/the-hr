@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { employees as mockEmployees } from '../data/mockData';
 
 export interface Employee {
   id: string;
@@ -16,13 +17,38 @@ export interface Employee {
 
 export const employeeService = {
   async getAll() {
-    const { data, error } = await supabase
-      .from('employees')
-      .select('*')
-      .order('created_at', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('*')
+        .order('created_at', { ascending: false });
+        
+      if (error) {
+        console.warn('Supabase error, falling back to mock data:', error.message);
+        return this.getMockData();
+      }
       
-    if (error) throw error;
-    return data as Employee[];
+      return data as Employee[];
+    } catch (err) {
+      console.warn('Connection failed, falling back to mock data');
+      return this.getMockData();
+    }
+  },
+
+  getMockData(): Employee[] {
+    return mockEmployees.map(e => ({
+      id: e.id,
+      employee_id: e.id,
+      first_name: e.name.split(' ')[0],
+      last_name: e.name.split(' ').slice(1).join(' '),
+      email: e.email,
+      phone: e.phone,
+      department: e.department,
+      designation: e.designation,
+      join_date: e.joinDate,
+      status: e.status,
+      avatar_url: e.avatar
+    }));
   },
 
   async getById(id: string) {
