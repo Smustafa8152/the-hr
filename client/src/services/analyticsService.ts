@@ -1,5 +1,3 @@
-import { supabase } from './supabase';
-
 export const analyticsService = {
   async getHeadcountGrowth() {
     // In a real app, this would be a complex query or a dedicated analytics table

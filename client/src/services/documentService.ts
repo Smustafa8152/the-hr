@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { api } from './api';
 
 export interface Document {
   id: string;
@@ -14,23 +14,15 @@ export interface Document {
 export const documentService = {
   async getAll() {
     try {
-      const { data, error } = await supabase
-        .from('documents')
-        .select('*')
-        .order('created_at', { ascending: false });
-        
-      if (error) {
-        console.warn('Documents table missing, using mock');
-        return [
-          { id: '1', name: 'Employee_Handbook_2025.pdf', owner: 'Admin', created_at: '2025-12-15', size: '2.4 MB', folder: 'Policies', type: 'pdf', url: '#' },
-          { id: '2', name: 'Offer_Letter_Template.docx', owner: 'HR Manager', created_at: '2025-12-10', size: '156 KB', folder: 'Templates', type: 'docx', url: '#' },
-          { id: '3', name: 'Visa_Process_Flow.png', owner: 'PRO', created_at: '2025-11-28', size: '1.1 MB', folder: 'Visas', type: 'png', url: '#' },
-        ];
-      }
-      return data as Document[];
+      const response = await api.get('/documents?select=*&order=created_at.desc');
+      return response.data as Document[];
     } catch (error) {
-      console.error('Error fetching documents:', error);
-      return [];
+      console.warn('Documents table missing or error, using mock');
+      return [
+        { id: '1', name: 'Employee_Handbook_2025.pdf', owner: 'Admin', created_at: '2025-12-15', size: '2.4 MB', folder: 'Policies', type: 'pdf', url: '#' },
+        { id: '2', name: 'Offer_Letter_Template.docx', owner: 'HR Manager', created_at: '2025-12-10', size: '156 KB', folder: 'Templates', type: 'docx', url: '#' },
+        { id: '3', name: 'Visa_Process_Flow.png', owner: 'PRO', created_at: '2025-11-28', size: '1.1 MB', folder: 'Visas', type: 'png', url: '#' },
+      ];
     }
   },
 

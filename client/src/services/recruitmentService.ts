@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { api } from './api';
 
 export interface Candidate {
   id: string;
@@ -13,13 +13,8 @@ export interface Candidate {
 export const recruitmentService = {
   async getAll() {
     try {
-      const { data, error } = await supabase
-        .from('candidates')
-        .select('*')
-        .order('created_at', { ascending: false });
-        
-      if (error) throw error;
-      return data as Candidate[];
+      const response = await api.get('/candidates?select=*&order=created_at.desc');
+      return response.data as Candidate[];
     } catch (error) {
       console.error('Error fetching candidates:', error);
       return [];
@@ -28,14 +23,11 @@ export const recruitmentService = {
 
   async create(candidate: Omit<Candidate, 'id' | 'created_at' | 'status'>) {
     try {
-      const { data, error } = await supabase
-        .from('candidates')
-        .insert([{ ...candidate, status: 'Applied' }])
-        .select()
-        .single();
-        
-      if (error) throw error;
-      return data;
+      const response = await api.post('/candidates', { ...candidate, status: 'Applied' });
+      if (response.data && response.data.length > 0) {
+        return response.data[0];
+      }
+      return response.data;
     } catch (error) {
       console.error('Error creating candidate:', error);
       throw error;
@@ -44,15 +36,11 @@ export const recruitmentService = {
 
   async updateStatus(id: string, status: Candidate['status']) {
     try {
-      const { data, error } = await supabase
-        .from('candidates')
-        .update({ status })
-        .eq('id', id)
-        .select()
-        .single();
-        
-      if (error) throw error;
-      return data;
+      const response = await api.patch(`/candidates?id=eq.${id}`, { status });
+      if (response.data && response.data.length > 0) {
+        return response.data[0];
+      }
+      return response.data;
     } catch (error) {
       console.error('Error updating candidate status:', error);
       throw error;
@@ -61,12 +49,7 @@ export const recruitmentService = {
 
   async delete(id: string) {
     try {
-      const { error } = await supabase
-        .from('candidates')
-        .delete()
-        .eq('id', id);
-        
-      if (error) throw error;
+      await api.delete(`/candidates?id=eq.${id}`);
       return true;
     } catch (error) {
       console.error('Error deleting candidate:', error);

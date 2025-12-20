@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { api } from './api';
 import { employees as mockEmployees } from '../data/mockData';
 
 export interface Employee {
@@ -19,19 +19,10 @@ export interface Employee {
 export const employeeService = {
   async getAll() {
     try {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .order('created_at', { ascending: false });
-        
-      if (error) {
-        console.warn('Supabase error, falling back to mock data:', error.message);
-        return this.getMockData();
-      }
-      
-      return data as Employee[];
-    } catch (err) {
-      console.warn('Connection failed, falling back to mock data');
+      const response = await api.get('/employees?select=*&order=created_at.desc');
+      return response.data as Employee[];
+    } catch (err: any) {
+      console.warn('API error, falling back to mock data:', err.message);
       return this.getMockData();
     }
   },
@@ -55,32 +46,24 @@ export const employeeService = {
 
   async getById(id: string) {
     try {
-      const { data, error } = await supabase
-        .from('employees')
-        .select('*')
-        .eq('id', id)
-        .single();
-        
-      if (error) {
-        console.warn(`Error fetching employee ${id}, falling back to mock`);
-        return this.getMockData().find(e => e.id === id);
+      const response = await api.get(`/employees?id=eq.${id}&select=*`);
+      if (response.data && response.data.length > 0) {
+        return response.data[0] as Employee;
       }
-      return data as Employee;
+      throw new Error('Employee not found');
     } catch (err) {
+      console.warn(`Error fetching employee ${id}, falling back to mock`);
       return this.getMockData().find(e => e.id === id);
     }
   },
 
   async create(employee: Omit<Employee, 'id' | 'created_at'>) {
     try {
-      const { data, error } = await supabase
-        .from('employees')
-        .insert([employee])
-        .select()
-        .single();
-        
-      if (error) throw error;
-      return data;
+      const response = await api.post('/employees', employee);
+      if (response.data && response.data.length > 0) {
+        return response.data[0];
+      }
+      return response.data;
     } catch (error) {
       console.error('Error creating employee:', error);
       throw error;
@@ -89,15 +72,11 @@ export const employeeService = {
 
   async update(id: string, updates: Partial<Employee>) {
     try {
-      const { data, error } = await supabase
-        .from('employees')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-        
-      if (error) throw error;
-      return data;
+      const response = await api.patch(`/employees?id=eq.${id}`, updates);
+      if (response.data && response.data.length > 0) {
+        return response.data[0];
+      }
+      return response.data;
     } catch (error) {
       console.error('Error updating employee:', error);
       throw error;
@@ -106,12 +85,7 @@ export const employeeService = {
 
   async delete(id: string) {
     try {
-      const { error } = await supabase
-        .from('employees')
-        .delete()
-        .eq('id', id);
-        
-      if (error) throw error;
+      await api.delete(`/employees?id=eq.${id}`);
       return true;
     } catch (error) {
       console.error('Error deleting employee:', error);

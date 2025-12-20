@@ -1,4 +1,3 @@
-import { supabase } from './supabase';
 import { leaveService } from './leaveService';
 import { attendanceService } from './attendanceService';
 

@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { api } from './api';
 
 export interface LeaveRequest {
   id: string;
@@ -20,21 +20,8 @@ export interface LeaveRequest {
 export const leaveService = {
   async getAll() {
     try {
-      const { data, error } = await supabase
-        .from('leave_requests')
-        .select(`
-          *,
-          employees (
-            first_name,
-            last_name,
-            employee_id,
-            avatar_url
-          )
-        `)
-        .order('created_at', { ascending: false });
-        
-      if (error) throw error;
-      return data as LeaveRequest[];
+      const response = await api.get('/leave_requests?select=*,employees(first_name,last_name,employee_id,avatar_url)&order=created_at.desc');
+      return response.data as LeaveRequest[];
     } catch (error) {
       console.error('Error fetching leave requests:', error);
       return [];
@@ -43,14 +30,8 @@ export const leaveService = {
 
   async getByEmployee(employeeId: string) {
     try {
-      const { data, error } = await supabase
-        .from('leave_requests')
-        .select('*')
-        .eq('employee_id', employeeId)
-        .order('created_at', { ascending: false });
-        
-      if (error) throw error;
-      return data as LeaveRequest[];
+      const response = await api.get(`/leave_requests?employee_id=eq.${employeeId}&select=*&order=created_at.desc`);
+      return response.data as LeaveRequest[];
     } catch (error) {
       console.error('Error fetching employee leaves:', error);
       return [];
@@ -59,14 +40,11 @@ export const leaveService = {
 
   async create(request: Omit<LeaveRequest, 'id' | 'created_at' | 'status'>) {
     try {
-      const { data, error } = await supabase
-        .from('leave_requests')
-        .insert([{ ...request, status: 'Pending' }])
-        .select()
-        .single();
-        
-      if (error) throw error;
-      return data;
+      const response = await api.post('/leave_requests', { ...request, status: 'Pending' });
+      if (response.data && response.data.length > 0) {
+        return response.data[0];
+      }
+      return response.data;
     } catch (error) {
       console.error('Error creating leave request:', error);
       throw error;
@@ -75,15 +53,11 @@ export const leaveService = {
 
   async updateStatus(id: string, status: 'Approved' | 'Rejected') {
     try {
-      const { data, error } = await supabase
-        .from('leave_requests')
-        .update({ status })
-        .eq('id', id)
-        .select()
-        .single();
-        
-      if (error) throw error;
-      return data;
+      const response = await api.patch(`/leave_requests?id=eq.${id}`, { status });
+      if (response.data && response.data.length > 0) {
+        return response.data[0];
+      }
+      return response.data;
     } catch (error) {
       console.error('Error updating leave status:', error);
       throw error;
@@ -92,12 +66,7 @@ export const leaveService = {
 
   async delete(id: string) {
     try {
-      const { error } = await supabase
-        .from('leave_requests')
-        .delete()
-        .eq('id', id);
-        
-      if (error) throw error;
+      await api.delete(`/leave_requests?id=eq.${id}`);
       return true;
     } catch (error) {
       console.error('Error deleting leave request:', error);
