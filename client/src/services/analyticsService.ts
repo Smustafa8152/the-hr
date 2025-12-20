@@ -1,34 +1,67 @@
+import { employeeService } from './employeeService';
+import { payrollService } from './payrollService';
+
 export const analyticsService = {
   async getHeadcountGrowth() {
-    // In a real app, this would be a complex query or a dedicated analytics table
-    // For now, we'll return mock data that mimics the structure expected by the chart
-    return [
-      { name: 'Jan', employees: 1100 },
-      { name: 'Feb', employees: 1120 },
-      { name: 'Mar', employees: 1150 },
-      { name: 'Apr', employees: 1180 },
-      { name: 'May', employees: 1200 },
-      { name: 'Jun', employees: 1248 },
-    ];
+    try {
+      const employees = await employeeService.getAll();
+      // Group by month of join_date
+      const growth: Record<string, number> = {};
+      
+      employees.forEach(emp => {
+        if (emp.join_date) {
+          const date = new Date(emp.join_date);
+          const month = date.toLocaleString('default', { month: 'short' });
+          growth[month] = (growth[month] || 0) + 1;
+        }
+      });
+
+      // Convert to array and accumulate
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      let currentCount = 0;
+      
+      return months.map(month => {
+        currentCount += growth[month] || 0;
+        return { name: month, employees: currentCount };
+      });
+    } catch (error) {
+      console.error('Error calculating headcount growth:', error);
+      return [];
+    }
   },
 
   async getAttritionByDept() {
-    return [
-      { name: 'Engineering', value: 12 },
-      { name: 'Sales', value: 18 },
-      { name: 'Marketing', value: 8 },
-      { name: 'HR', value: 4 },
-    ];
+    try {
+      const employees = await employeeService.getAll();
+      // Calculate active employees by department
+      const deptCounts: Record<string, number> = {};
+      
+      employees.forEach(emp => {
+        if (emp.department) {
+          deptCounts[emp.department] = (deptCounts[emp.department] || 0) + 1;
+        }
+      });
+
+      return Object.entries(deptCounts).map(([name, value]) => ({ name, value }));
+    } catch (error) {
+      console.error('Error calculating department stats:', error);
+      return [];
+    }
   },
 
   async getPayrollCostTrend() {
-    return [
-      { name: 'Jan', cost: 130000 },
-      { name: 'Feb', cost: 132000 },
-      { name: 'Mar', cost: 135000 },
-      { name: 'Apr', cost: 138000 },
-      { name: 'May', cost: 140000 },
-      { name: 'Jun', cost: 142000 },
-    ];
+    try {
+      const cycles = await payrollService.getAll();
+      // Sort by period/date
+      const sortedCycles = cycles.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      
+      return sortedCycles.map(cycle => ({
+        name: cycle.period,
+        cost: cycle.total_amount
+      }));
+    } catch (error) {
+      console.error('Error calculating payroll trend:', error);
+      return [];
+    }
   }
 };

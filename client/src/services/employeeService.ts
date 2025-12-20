@@ -1,5 +1,4 @@
 import { api, adminApi } from './api';
-import { employees as mockEmployees } from '../data/mockData';
 
 export interface Employee {
   id: string;
@@ -22,26 +21,9 @@ export const employeeService = {
       const response = await api.get('/employees?select=*&order=created_at.desc');
       return response.data as Employee[];
     } catch (err: any) {
-      console.warn('API error, falling back to mock data:', err.message);
-      return this.getMockData();
+      console.error('API error fetching employees:', err.message);
+      return [];
     }
-  },
-
-  getMockData(): Employee[] {
-    return mockEmployees.map(e => ({
-      id: e.id,
-      employee_id: e.id,
-      first_name: e.name.split(' ')[0],
-      last_name: e.name.split(' ').slice(1).join(' '),
-      email: e.email,
-      phone: e.phone,
-      department: e.department,
-      designation: e.designation,
-      join_date: e.joinDate,
-      status: e.status,
-      avatar_url: e.avatar,
-      salary: 0
-    }));
   },
 
   async getById(id: string) {
@@ -52,8 +34,8 @@ export const employeeService = {
       }
       throw new Error('Employee not found');
     } catch (err) {
-      console.warn(`Error fetching employee ${id}, falling back to mock`);
-      return this.getMockData().find(e => e.id === id);
+      console.error(`Error fetching employee ${id}:`, err);
+      throw err;
     }
   },
 

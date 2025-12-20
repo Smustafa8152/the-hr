@@ -1,5 +1,4 @@
 import { api, adminApi } from './api';
-import { attendance as mockAttendance } from '../data/mockData';
 
 export interface AttendanceLog {
   id: string;
@@ -24,28 +23,9 @@ export const attendanceService = {
       const response = await api.get('/attendance_logs?select=*,employees(first_name,last_name,employee_id)&order=date.desc');
       return response.data as AttendanceLog[];
     } catch (err: any) {
-      console.warn('API error, falling back to mock data:', err.message);
-      return this.getMockData();
+      console.error('API error fetching attendance:', err.message);
+      return [];
     }
-  },
-
-  getMockData(): AttendanceLog[] {
-    return mockAttendance.map(a => ({
-      id: String(a.id),
-      employee_id: a.employeeId,
-      date: a.date,
-      check_in: a.checkIn ? `${a.date}T${a.checkIn}` : '',
-      check_out: a.checkOut ? `${a.date}T${a.checkOut}` : '',
-      status: a.status,
-      late_minutes: a.late,
-      overtime_minutes: a.overtime,
-      is_regularized: false,
-      employees: {
-        first_name: a.employeeId,
-        last_name: '',
-        employee_id: a.employeeId
-      }
-    }));
   },
 
   async getByEmployee(employeeId: string) {

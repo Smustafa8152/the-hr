@@ -15,8 +15,8 @@ export const essService = {
 
       return {
         checkInTime: todayLog?.check_in ? new Date(todayLog.check_in).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '--:--',
-        leaveBalance: 22, // Mock balance
-        nextPayday: 'Jan 25',
+        leaveBalance: 0, // Needs backend support for real balance
+        nextPayday: 'TBD',
         pendingRequests
       };
     } catch (error) {
@@ -35,11 +35,7 @@ export const essService = {
   },
 
   async getPayslips(employeeId: string) {
-    // Mock payslips for now as we don't have a full payroll history table linked to employees yet
-    return [
-      { id: '1', month: 'December 2025', amount: '1,445.000 KD', status: 'Paid' },
-      { id: '2', month: 'November 2025', amount: '1,445.000 KD', status: 'Paid' },
-      { id: '3', month: 'October 2025', amount: '1,445.000 KD', status: 'Paid' },
-    ];
+    // Return empty array until payroll history is implemented
+    return [];
   }
 };

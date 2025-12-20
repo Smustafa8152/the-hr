@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, adminApi } from './api';
 
 export interface TimesheetEntry {
   id: string;
@@ -16,18 +16,28 @@ export const timesheetService = {
       const response = await api.get(`/timesheets?employee_id=eq.${employeeId}&week=eq.${week}&select=*`);
       return response.data as TimesheetEntry[];
     } catch (error) {
-      // Fallback to mock if table doesn't exist yet
-      console.warn('Timesheet table missing or error, using mock');
-      return [
-        { id: '1', employee_id: employeeId, week, status: 'Draft' as const, project: 'Project Alpha', hours: { Mon: 8, Tue: 8, Wed: 8, Thu: 8, Fri: 8 }, total_hours: 40 },
-        { id: '2', employee_id: employeeId, week, status: 'Draft' as const, project: 'Internal Ops', hours: { Mon: 2, Tue: 0, Wed: 1, Thu: 0, Fri: 2 }, total_hours: 5 }
-      ];
+      console.error('Error fetching timesheets:', error);
+      return [];
     }
   },
 
   async saveTimesheet(entry: Omit<TimesheetEntry, 'id' | 'status' | 'total_hours'>) {
-    // Mock save
-    console.log('Saving timesheet:', entry);
-    return { ...entry, id: Math.random().toString(), status: 'Draft', total_hours: 0 };
+    try {
+      const total_hours = Object.values(entry.hours).reduce((a, b) => a + b, 0);
+      const payload = {
+        ...entry,
+        status: 'Draft',
+        total_hours
+      };
+      
+      const response = await adminApi.post('/timesheets', payload);
+      if (response.data && response.data.length > 0) {
+        return response.data[0];
+      }
+      return response.data;
+    } catch (error) {
+      console.error('Error saving timesheet:', error);
+      throw error;
+    }
   }
 };
