@@ -1,8 +1,8 @@
-# The System - Enterprise HR Management System
+# NZSuite - Enterprise HR Management System
 
 <div align="center">
 
-![The System Logo](https://img.shields.io/badge/The%20System-HRMS-blue?style=for-the-badge)
+![NZSuite Logo](https://img.shields.io/badge/NZSuite-HRMS-blue?style=for-the-badge)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?style=flat&logo=typescript)](https://www.typescriptlang.org/)
 [![tRPC](https://img.shields.io/badge/tRPC-11-2596BE?style=flat&logo=trpc)](https://trpc.io/)
@@ -95,8 +95,8 @@ A modern, full-stack enterprise HR management system built with cutting-edge tec
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/salemsharhan/the-system-hr-frontend.git
-   cd the-system-hr-frontend
+   git clone https://github.com/salemsharhan/nzsuite-hr-frontend.git
+   cd nzsuite-hr-frontend
    ```
 
 2. **Install dependencies**

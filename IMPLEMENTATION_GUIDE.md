@@ -1,4 +1,4 @@
-# The System - HRMS Implementation Guide
+# NZSuite - HRMS Implementation Guide
 
 ## 🏗️ Architecture Overview
 

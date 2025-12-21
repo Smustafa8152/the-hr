@@ -1,4 +1,4 @@
-# The System - HRMS Code Export
+# NZSuite - HRMS Code Export
 
 This document contains all the key code implementations for the HR Management System.
 

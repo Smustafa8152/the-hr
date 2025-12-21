@@ -86,12 +86,14 @@ export const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
         {/* Logo Area */}
         <div className="h-16 flex items-center px-6 border-b border-white/5">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-cyan-500 flex items-center justify-center shadow-lg shadow-primary/20 shrink-0">
-              <div className="w-4 h-4 border-2 border-white rounded-sm transform rotate-45" />
-            </div>
+            <img 
+              src="/nzsuite-icon.png" 
+              alt="NZSuite" 
+              className="w-8 h-8 shrink-0"
+            />
             {!collapsed && (
               <div className="flex flex-col">
-                <span className="font-heading font-bold text-lg tracking-tight text-foreground">The System</span>
+                <span className="font-heading font-bold text-lg tracking-tight text-foreground">NZSuite</span>
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono">Enterprise HR</span>
               </div>
             )}
