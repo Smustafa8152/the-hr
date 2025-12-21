@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   LayoutDashboard, 
   Users, 
@@ -23,35 +24,74 @@ import {
 } from 'lucide-react';
 import { cn } from '../common/UIComponents';
 
-const SidebarItem = ({ icon: Icon, label, href, active, collapsed }: any) => (
-  <Link href={href}>
-    <div className={cn(
-      "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all cursor-pointer group mb-1",
-      active 
-        ? "bg-primary/10 text-primary border border-primary/20 shadow-sm" 
-        : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
-    )}>
+const SidebarItem = ({ icon: Icon, label, href, active, collapsed }: any) => {
+  const [, setLocation] = useLocation();
+  
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('Navigating to:', href); // Debug log
+    setLocation(href);
+  };
+  
+  return (
+    <div 
+      onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          setLocation(href);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      className={cn(
+        "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all cursor-pointer group mb-1",
+        active 
+          ? "bg-primary/10 text-primary border border-primary/20 shadow-sm" 
+          : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+      )}
+    >
       <Icon size={20} className={cn("transition-colors", active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
       {!collapsed && <span className="font-medium text-sm">{label}</span>}
       {active && !collapsed && <div className="ml-auto rtl:mr-auto rtl:ml-0 w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_rgba(var(--primary),0.5)]" />}
     </div>
-  </Link>
-);
+  );
+};
 
 export const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: any) => {
   const [location] = useLocation();
   const { t } = useTranslation();
   const { direction } = useLanguage();
+  const { user, signOut, hasPermission } = useAuth();
 
-  // Mock user role - in a real app this would come from auth context
-  const userRole = 'Admin'; // 'Admin' | 'Consultant' | 'Employee'
+  // Map user roles to menu item roles
+  const canAccess = (menuRoles: string[]) => {
+    if (!user) return false;
+    
+    // Super admin can access everything
+    if (user.role === 'super_admin') return true;
+    
+    // Map menu roles to auth roles
+    const roleMap: Record<string, string[]> = {
+      'Admin': ['super_admin', 'admin'],
+      'Consultant': ['super_admin', 'admin'],
+      'Employee': ['super_admin', 'admin', 'employee'],
+      'SuperAdmin': ['super_admin'], // Only for super_admin
+    };
+    
+    return menuRoles.some(menuRole => {
+      const allowedRoles = roleMap[menuRole] || [];
+      return allowedRoles.includes(user.role);
+    });
+  };
 
   const menuItems = [
     { icon: LayoutDashboard, label: t('common.dashboard'), href: '/', roles: ['Admin', 'Consultant', 'Employee'] },
     { icon: Users, label: t('common.employees'), href: '/employees', roles: ['Admin'] },
     { icon: Clock, label: t('common.attendance'), href: '/attendance', roles: ['Admin', 'Employee'] },
     { icon: Calendar, label: t('common.leaves'), href: '/leaves', roles: ['Admin', 'Employee'] },
-    { icon: DollarSign, label: t('common.payroll'), href: '/payroll', roles: ['Admin'] },
+    { icon: DollarSign, label: t('common.payroll'), href: '/payroll', roles: ['Admin', 'Employee'] },
     { icon: Users, label: 'Self Service', href: '/ess', roles: ['Admin', 'Employee', 'Consultant'] },
     { icon: Clock, label: 'Timesheets', href: '/timesheets', roles: ['Admin', 'Employee', 'Consultant'] },
     { icon: Briefcase, label: t('common.recruitment'), href: '/recruitment', roles: ['Admin'] },
@@ -59,8 +99,15 @@ export const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
     { icon: FileText, label: t('common.documents'), href: '/documents', roles: ['Admin', 'Consultant'] },
     { icon: BarChart3, label: t('common.analytics'), href: '/analytics', roles: ['Admin'] },
     { icon: ShieldCheck, label: t('common.admin'), href: '/admin', roles: ['Admin'] },
-    { icon: Settings, label: t('common.settings'), href: '/settings', roles: ['Admin'] },
-  ];
+    // Settings only for super_admin
+    { icon: Settings, label: t('common.settings'), href: '/settings', roles: ['SuperAdmin'], superAdminOnly: true },
+  ].filter(item => {
+    // Filter by role access
+    if (!canAccess(item.roles)) return false;
+    // If superAdminOnly flag is set, only show for super_admin
+    if (item.superAdminOnly && user?.role !== 'super_admin') return false;
+    return true;
+  });
 
   return (
     <>
@@ -102,7 +149,7 @@ export const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
         <div className="flex-1 overflow-y-auto py-6 px-3 custom-scrollbar">
           <div className="space-y-1">
             {!collapsed && <div className="px-3 mb-2 text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">Main Menu</div>}
-            {menuItems.filter(item => item.roles.includes(userRole)).map((item) => (
+            {menuItems.map((item) => (
               <SidebarItem 
                 key={item.href}
                 icon={item.icon}
@@ -122,17 +169,27 @@ export const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
             collapsed ? "justify-center" : ""
           )}>
             <img 
-              src="https://i.pravatar.cc/150?u=admin" 
+              src={`https://ui-avatars.com/api/?name=${user?.email || 'User'}&background=random`}
               alt="User" 
               className="w-8 h-8 rounded-full border border-white/10"
             />
             {!collapsed && (
               <div className="flex-1 min-w-0 text-start">
-                <div className="text-sm font-medium truncate text-foreground">Admin User</div>
-                <div className="text-xs text-muted-foreground truncate">admin@thesystem.com</div>
+                <div className="text-sm font-medium truncate text-foreground">{user?.email || 'User'}</div>
+                <div className="text-xs text-muted-foreground truncate capitalize">{user?.role?.replace('_', ' ') || 'Employee'}</div>
               </div>
             )}
-            {!collapsed && <LogOut size={16} className="text-muted-foreground hover:text-destructive transition-colors rtl:rotate-180" />}
+            {!collapsed && (
+              <button
+                onClick={async () => {
+                  await signOut();
+                  window.location.href = '/login';
+                }}
+                className="text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <LogOut size={16} className="rtl:rotate-180" />
+              </button>
+            )}
           </div>
         </div>
       </aside>

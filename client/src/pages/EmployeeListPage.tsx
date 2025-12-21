@@ -10,37 +10,110 @@ import {
   MapPin,
   User
 } from 'lucide-react';
-import { Card, CardContent, Button, Input, Badge } from '../components/common/UIComponents';
+import { Card, CardContent, Button, Input, Badge, Tabs, TabsList, TabsTrigger, TabsContent } from '../components/common/UIComponents';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import Modal from '../components/common/Modal';
 import { employeeService, Employee } from '../services/employeeService';
+import { departmentService, Department } from '../services/departmentService';
+import { roleService, Role } from '../services/roleService';
+import { jobService, Job } from '../services/jobService';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function EmployeeListPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDept, setFilterDept] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   
+  // Masters data
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('');
+  const [availableJobs, setAvailableJobs] = useState<Job[]>([]);
+  
   // Form State
   const [newEmployee, setNewEmployee] = useState({
+    // Basic Information
     first_name: '',
     last_name: '',
     email: '',
-    department: 'Engineering',
-    position: '',
-    salary: 0,
-    joining_date: new Date().toISOString().split('T')[0],
-    employment_type: 'Full Time'
+    phone: '',
+    alternate_phone: '',
+    date_of_birth: '',
+    gender: '',
+    marital_status: '',
+    nationality: '',
+    
+    // Address
+    address: '',
+    city: '',
+    state: '',
+    country: '',
+    postal_code: '',
+    
+    // Emergency Contact
+    emergency_contact_name: '',
+    emergency_contact_phone: '',
+    emergency_contact_relationship: '',
+    
+    // Employment Details
+    department_id: '',
+    role_id: '',
+    job_id: '',
+    employment_type: 'Full Time',
+    join_date: new Date().toISOString().split('T')[0],
+    salary: '',
+    work_location: 'Office',
+    reporting_manager_id: '',
+    
+    // Additional
+    notes: ''
   });
 
   useEffect(() => {
     loadEmployees();
+    loadMasters();
   }, []);
+
+  useEffect(() => {
+    if (selectedRoleId) {
+      loadJobsForRole(selectedRoleId);
+    } else {
+      setAvailableJobs([]);
+    }
+  }, [selectedRoleId]);
+
+  const loadMasters = async () => {
+    try {
+      const [depts, rolesData] = await Promise.all([
+        departmentService.getAll(),
+        roleService.getAll()
+      ]);
+      setDepartments(depts);
+      setRoles(rolesData);
+    } catch (error) {
+      console.error('Failed to load masters:', error);
+    }
+  };
+
+  const loadJobsForRole = async (roleId: string) => {
+    try {
+      const jobsData = await jobService.getByRoleId(roleId);
+      setAvailableJobs(jobsData);
+    } catch (error) {
+      console.error('Failed to load jobs:', error);
+      setAvailableJobs([]);
+    }
+  };
 
   const loadEmployees = async () => {
     try {
-      const data = await employeeService.getAll();
+      // Pass company_id for admin users to filter employees by company
+      const data = await employeeService.getAll(user?.company_id);
       setEmployees(data);
     } catch (error) {
       console.error('Failed to load employees:', error);
@@ -52,23 +125,45 @@ export default function EmployeeListPage() {
   const handleAddEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Create payload without salary as it's not in the schema
-      const { salary, ...employeeData } = newEmployee;
-      
-      await employeeService.create({
-        first_name: employeeData.first_name,
-        last_name: employeeData.last_name,
-        email: employeeData.email,
-        department: employeeData.department,
-        employee_id: `EMP-${Math.floor(Math.random() * 10000)}`,
+      const payload: any = {
+        first_name: newEmployee.first_name,
+        last_name: newEmployee.last_name,
+        email: newEmployee.email,
+        phone: newEmployee.phone || null,
+        alternate_phone: newEmployee.alternate_phone || null,
+        date_of_birth: newEmployee.date_of_birth || null,
+        gender: newEmployee.gender || null,
+        marital_status: newEmployee.marital_status || null,
+        nationality: newEmployee.nationality || null,
+        address: newEmployee.address || null,
+        city: newEmployee.city || null,
+        state: newEmployee.state || null,
+        country: newEmployee.country || null,
+        postal_code: newEmployee.postal_code || null,
+        emergency_contact_name: newEmployee.emergency_contact_name || null,
+        emergency_contact_phone: newEmployee.emergency_contact_phone || null,
+        emergency_contact_relationship: newEmployee.emergency_contact_relationship || null,
+        department_id: newEmployee.department_id || null,
+        job_id: newEmployee.job_id || null,
+        role_id: newEmployee.role_id || null,
+        // Keep legacy fields for backward compatibility
+        department: departments.find(d => d.id === newEmployee.department_id)?.name || null,
+        designation: jobs.find(j => j.id === newEmployee.job_id)?.name || null,
+        employment_type: newEmployee.employment_type,
+        employee_type: newEmployee.employment_type,
+        join_date: newEmployee.join_date || null,
+        salary: newEmployee.salary ? parseFloat(newEmployee.salary) : null,
+        work_location: newEmployee.work_location || null,
+        reporting_manager_id: newEmployee.reporting_manager_id && newEmployee.reporting_manager_id !== 'none' ? newEmployee.reporting_manager_id : null,
+        notes: newEmployee.notes || null,
+        employee_id: `EMP-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`,
         status: 'Active',
-        avatar_url: `https://ui-avatars.com/api/?name=${employeeData.first_name}+${employeeData.last_name}`,
-        phone: null as any, // Send null for optional fields
-        designation: employeeData.position,
-        join_date: employeeData.joining_date,
-        employment_type: employeeData.employment_type as any
-      });
+        avatar_url: `https://ui-avatars.com/api/?name=${newEmployee.first_name}+${newEmployee.last_name}`,
+        // Automatically assign to admin's company if user is admin
+        company_id: user?.company_id || null
+      };
       
+      await employeeService.create(payload);
       await loadEmployees();
       setIsModalOpen(false);
       // Reset form
@@ -76,12 +171,32 @@ export default function EmployeeListPage() {
         first_name: '',
         last_name: '',
         email: '',
-        department: 'Engineering',
-        position: '',
-        salary: 0,
-        joining_date: new Date().toISOString().split('T')[0],
-        employment_type: 'Full Time'
+        phone: '',
+        alternate_phone: '',
+        date_of_birth: '',
+        gender: '',
+        marital_status: '',
+        nationality: '',
+        address: '',
+        city: '',
+        state: '',
+        country: '',
+        postal_code: '',
+        emergency_contact_name: '',
+        emergency_contact_phone: '',
+        emergency_contact_relationship: '',
+        department_id: '',
+        role_id: '',
+        job_id: '',
+        employment_type: 'Full Time',
+        join_date: new Date().toISOString().split('T')[0],
+        salary: '',
+        work_location: 'Office',
+        reporting_manager_id: '',
+        notes: ''
       });
+      setSelectedRoleId('');
+      setAvailableJobs([]);
     } catch (error) {
       console.error('Failed to add employee:', error);
       alert('Failed to add employee. Please check console.');
@@ -97,7 +212,7 @@ export default function EmployeeListPage() {
     return matchesSearch && matchesDept;
   });
 
-  const departments = ['All', ...Array.from(new Set(employees.map(e => e.department || 'Unassigned')))];
+  const departmentNames = ['All', ...Array.from(new Set(employees.map(e => e.department || 'Unassigned')))];
 
   return (
     <div className="space-y-6">
@@ -114,100 +229,392 @@ export default function EmployeeListPage() {
       </div>
 
       {/* Add Employee Modal */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={t('employees.addEmployee')}>
-        <form onSubmit={handleAddEmployee} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">First Name</label>
-              <Input 
-                required
-                value={newEmployee.first_name}
-                onChange={e => setNewEmployee({...newEmployee, first_name: e.target.value})}
-                placeholder="John" 
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Last Name</label>
-              <Input 
-                required
-                value={newEmployee.last_name}
-                onChange={e => setNewEmployee({...newEmployee, last_name: e.target.value})}
-                placeholder="Doe" 
-              />
-            </div>
-          </div>
-          
-          <div className="space-y-2">
-            <label className="text-sm font-medium">{t('employees.email')}</label>
-            <Input 
-              required
-              type="email"
-              value={newEmployee.email}
-              onChange={e => setNewEmployee({...newEmployee, email: e.target.value})}
-              placeholder="john@example.com" 
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">{t('employees.department')}</label>
-              <select 
-                className="w-full h-10 bg-white/5 border border-white/10 rounded-md px-3 text-sm focus:outline-none focus:border-primary"
-                value={newEmployee.department}
-                onChange={e => setNewEmployee({...newEmployee, department: e.target.value})}
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={t('employees.addEmployee')} size="2xl">
+        <form onSubmit={handleAddEmployee} className="space-y-6">
+          <Tabs defaultValue="basic" className="w-full">
+            <TabsList className="inline-flex h-12 items-center justify-start rounded-lg bg-white/5 p-1 text-muted-foreground w-full">
+              <TabsTrigger 
+                value="basic" 
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm flex-1"
               >
-                <option value="Engineering">Engineering</option>
-                <option value="Sales">Sales</option>
-                <option value="Marketing">Marketing</option>
-                <option value="HR">HR</option>
-                <option value="Operations">Operations</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Employment Type</label>
-              <select 
-                className="w-full h-10 bg-white/5 border border-white/10 rounded-md px-3 text-sm focus:outline-none focus:border-primary"
-                value={newEmployee.employment_type}
-                onChange={e => setNewEmployee({...newEmployee, employment_type: e.target.value})}
+                Basic Info
+              </TabsTrigger>
+              <TabsTrigger 
+                value="contact" 
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm flex-1"
               >
-                <option value="Full Time">Full Time</option>
-                <option value="Part Time">Part Time</option>
-                <option value="Consultant">Consultant</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Position</label>
-              <Input 
-                value={newEmployee.position}
-                onChange={e => setNewEmployee({...newEmployee, position: e.target.value})}
-                placeholder="Software Engineer" 
-              />
-            </div>
-          </div>
+                Contact
+              </TabsTrigger>
+              <TabsTrigger 
+                value="employment" 
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm flex-1"
+              >
+                Employment
+              </TabsTrigger>
+              <TabsTrigger 
+                value="emergency" 
+                className="inline-flex items-center justify-center whitespace-nowrap rounded-md px-4 py-2 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-sm flex-1"
+              >
+                Emergency
+              </TabsTrigger>
+            </TabsList>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Joining Date</label>
-              <Input 
-                type="date"
-                value={newEmployee.joining_date}
-                onChange={e => setNewEmployee({...newEmployee, joining_date: e.target.value})}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Salary</label>
-              <Input 
-                type="number"
-                value={newEmployee.salary}
-                onChange={e => setNewEmployee({...newEmployee, salary: Number(e.target.value)})}
-                placeholder="5000" 
-              />
-            </div>
-          </div>
+            {/* Basic Information Tab */}
+            <TabsContent value="basic" className="mt-6 space-y-5 focus-visible:outline-none">
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">First Name *</label>
+                  <Input 
+                    required
+                    value={newEmployee.first_name}
+                    onChange={e => setNewEmployee({...newEmployee, first_name: e.target.value})}
+                    placeholder="John" 
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Last Name *</label>
+                  <Input 
+                    required
+                    value={newEmployee.last_name}
+                    onChange={e => setNewEmployee({...newEmployee, last_name: e.target.value})}
+                    placeholder="Doe" 
+                    className="h-11"
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Email *</label>
+                <Input 
+                  required
+                  type="email"
+                  value={newEmployee.email}
+                  onChange={e => setNewEmployee({...newEmployee, email: e.target.value})}
+                  placeholder="john@example.com" 
+                  className="h-11"
+                />
+              </div>
 
-          <div className="pt-4 flex justify-end gap-3">
-            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit">{t('common.save')}</Button>
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Date of Birth</label>
+                  <Input 
+                    type="date"
+                    value={newEmployee.date_of_birth}
+                    onChange={e => setNewEmployee({...newEmployee, date_of_birth: e.target.value})}
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Gender</label>
+                  <Select value={newEmployee.gender} onValueChange={(value) => setNewEmployee({...newEmployee, gender: value})}>
+                    <SelectTrigger className="w-full h-11">
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                      <SelectItem value="Prefer not to say">Prefer not to say</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Marital Status</label>
+                  <Select value={newEmployee.marital_status} onValueChange={(value) => setNewEmployee({...newEmployee, marital_status: value})}>
+                    <SelectTrigger className="w-full h-11">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Single">Single</SelectItem>
+                      <SelectItem value="Married">Married</SelectItem>
+                      <SelectItem value="Divorced">Divorced</SelectItem>
+                      <SelectItem value="Widowed">Widowed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Nationality</label>
+                  <Input 
+                    value={newEmployee.nationality}
+                    onChange={e => setNewEmployee({...newEmployee, nationality: e.target.value})}
+                    placeholder="e.g., Kuwaiti, Saudi" 
+                    className="h-11"
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Contact Information Tab */}
+            <TabsContent value="contact" className="mt-6 space-y-5 focus-visible:outline-none">
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Phone</label>
+                  <Input 
+                    type="tel"
+                    value={newEmployee.phone}
+                    onChange={e => setNewEmployee({...newEmployee, phone: e.target.value})}
+                    placeholder="+965 1234 5678" 
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Alternate Phone</label>
+                  <Input 
+                    type="tel"
+                    value={newEmployee.alternate_phone}
+                    onChange={e => setNewEmployee({...newEmployee, alternate_phone: e.target.value})}
+                    placeholder="+965 9876 5432" 
+                    className="h-11"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Address</label>
+                <Input 
+                  value={newEmployee.address}
+                  onChange={e => setNewEmployee({...newEmployee, address: e.target.value})}
+                  placeholder="Street address" 
+                  className="h-11"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">City</label>
+                  <Input 
+                    value={newEmployee.city}
+                    onChange={e => setNewEmployee({...newEmployee, city: e.target.value})}
+                    placeholder="City" 
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">State/Province</label>
+                  <Input 
+                    value={newEmployee.state}
+                    onChange={e => setNewEmployee({...newEmployee, state: e.target.value})}
+                    placeholder="State" 
+                    className="h-11"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Country</label>
+                  <Input 
+                    value={newEmployee.country}
+                    onChange={e => setNewEmployee({...newEmployee, country: e.target.value})}
+                    placeholder="Country" 
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Postal Code</label>
+                  <Input 
+                    value={newEmployee.postal_code}
+                    onChange={e => setNewEmployee({...newEmployee, postal_code: e.target.value})}
+                    placeholder="12345" 
+                    className="h-11"
+                  />
+                </div>
+              </div>
+            </TabsContent>
+
+            {/* Employment Details Tab */}
+            <TabsContent value="employment" className="mt-6 space-y-5 focus-visible:outline-none">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Department *</label>
+                <Select value={newEmployee.department_id} onValueChange={(value) => setNewEmployee({...newEmployee, department_id: value})} required>
+                  <SelectTrigger className="w-full h-11">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments.map(dept => (
+                      <SelectItem key={dept.id} value={dept.id}>{dept.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Role *</label>
+                  <Select 
+                    value={selectedRoleId} 
+                    onValueChange={(value) => {
+                      setSelectedRoleId(value);
+                      setNewEmployee({...newEmployee, role_id: value, job_id: ''});
+                    }}
+                    required
+                  >
+                    <SelectTrigger className="w-full h-11">
+                      <SelectValue placeholder="Select role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {roles.map(role => (
+                        <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Job *</label>
+                  <Select 
+                    value={newEmployee.job_id} 
+                    onValueChange={(value) => setNewEmployee({...newEmployee, job_id: value})}
+                    disabled={!selectedRoleId || availableJobs.length === 0}
+                    required
+                  >
+                    <SelectTrigger className="w-full h-11">
+                      <SelectValue placeholder={selectedRoleId ? "Select job" : "Select role first"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableJobs.map(job => (
+                        <SelectItem key={job.id} value={job.id}>{job.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Employment Type *</label>
+                  <Select value={newEmployee.employment_type} onValueChange={(value) => setNewEmployee({...newEmployee, employment_type: value})}>
+                    <SelectTrigger className="w-full h-11">
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Full Time">Full Time</SelectItem>
+                      <SelectItem value="Part Time">Part Time</SelectItem>
+                      <SelectItem value="Consultant">Consultant</SelectItem>
+                      <SelectItem value="Intern">Intern</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Work Location</label>
+                  <Select value={newEmployee.work_location} onValueChange={(value) => setNewEmployee({...newEmployee, work_location: value})}>
+                    <SelectTrigger className="w-full h-11">
+                      <SelectValue placeholder="Select location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Office">Office</SelectItem>
+                      <SelectItem value="Remote">Remote</SelectItem>
+                      <SelectItem value="Hybrid">Hybrid</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Joining Date *</label>
+                  <Input 
+                    type="date"
+                    required
+                    value={newEmployee.join_date}
+                    onChange={e => setNewEmployee({...newEmployee, join_date: e.target.value})}
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Salary</label>
+                  <Input 
+                    type="number"
+                    step="0.01"
+                    value={newEmployee.salary}
+                    onChange={e => setNewEmployee({...newEmployee, salary: e.target.value})}
+                    placeholder="5000.00" 
+                    className="h-11"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Reporting Manager</label>
+                <Select value={newEmployee.reporting_manager_id} onValueChange={(value) => setNewEmployee({...newEmployee, reporting_manager_id: value})}>
+                  <SelectTrigger className="w-full h-11">
+                    <SelectValue placeholder="Select manager" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {employees.map(emp => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.first_name || emp.firstName} {emp.last_name || emp.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </TabsContent>
+
+            {/* Emergency Contact Tab */}
+            <TabsContent value="emergency" className="mt-6 space-y-5 focus-visible:outline-none">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Emergency Contact Name</label>
+                <Input 
+                  value={newEmployee.emergency_contact_name}
+                  onChange={e => setNewEmployee({...newEmployee, emergency_contact_name: e.target.value})}
+                  placeholder="Contact name" 
+                  className="h-11"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Emergency Contact Phone</label>
+                  <Input 
+                    type="tel"
+                    value={newEmployee.emergency_contact_phone}
+                    onChange={e => setNewEmployee({...newEmployee, emergency_contact_phone: e.target.value})}
+                    placeholder="+965 1234 5678" 
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Relationship</label>
+                  <Select value={newEmployee.emergency_contact_relationship} onValueChange={(value) => setNewEmployee({...newEmployee, emergency_contact_relationship: value})}>
+                    <SelectTrigger className="w-full h-11">
+                      <SelectValue placeholder="Select relationship" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Spouse">Spouse</SelectItem>
+                      <SelectItem value="Parent">Parent</SelectItem>
+                      <SelectItem value="Sibling">Sibling</SelectItem>
+                      <SelectItem value="Child">Child</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Notes</label>
+                <textarea
+                  className="w-full min-h-[120px] rounded-lg border border-input bg-background/50 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 transition-all resize-none"
+                  value={newEmployee.notes}
+                  onChange={e => setNewEmployee({...newEmployee, notes: e.target.value})}
+                  placeholder="Additional notes..."
+                />
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <div className="pt-6 mt-6 flex justify-end gap-3 border-t border-white/10">
+            <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)} className="min-w-[100px]">
+              {t('common.cancel') || 'Cancel'}
+            </Button>
+            <Button type="submit" variant="primary" className="min-w-[100px]">
+              {t('common.save') || 'Save Employee'}
+            </Button>
           </div>
         </form>
       </Modal>
@@ -226,7 +633,7 @@ export default function EmployeeListPage() {
               />
             </div>
             <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
-              {departments.map(dept => (
+              {departmentNames.map(dept => (
                 <Button 
                   key={dept}
                   variant={filterDept === dept ? 'primary' : 'outline'}

@@ -5,7 +5,10 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./context/LanguageContext";
+import { AuthProvider } from "./contexts/AuthContext";
 import { MainLayout } from "./components/layout/MainLayout";
+import LoginPage from "./pages/LoginPage";
+import ProtectedRoute from "./components/ProtectedRoute";
 import DashboardPage from "./pages/DashboardPage";
 import EmployeeListPage from "./pages/EmployeeListPage";
 import EmployeeDetailPage from "./pages/EmployeeDetailPage";
@@ -33,45 +36,151 @@ const PlaceholderPage = ({ title }: { title: string }) => (
   </div>
 );
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
-    <MainLayout>
-      <Switch>
-        <Route path="/" component={DashboardPage} />
-        <Route path="/employees" component={EmployeeListPage} />
-        <Route path="/employees/:id" component={EmployeeDetailPage} />
-        <Route path="/attendance" component={AttendancePage} />
-        <Route path="/payroll" component={PayrollPage} />
-        <Route path="/setup" component={SetupPage} />
-        <Route path="/leaves" component={LeavesPage} />
-        <Route path="/recruitment" component={RecruitmentPage} />
-        <Route path="/ess" component={ESSPage} />
-        <Route path="/timesheets" component={TimesheetsPage} />
-        <Route path="/documents" component={DocumentsPage} />
-        <Route path="/analytics" component={AnalyticsPage} />
-        <Route path="/admin" component={AdminPage} />
-        <Route path="/settings" component={SettingsPage} />
-        <Route path="/hiring-checklist" component={HiringChecklistPage} />
-        <Route path="/roles-permissions" component={RolesPermissionsPage} />
-        
-        {/* Fallback */}
-        <Route component={NotFound} />
-      </Switch>
-    </MainLayout>
+    <Switch>
+      {/* Public route */}
+      <Route path="/login" component={LoginPage} />
+      
+      {/* Protected routes */}
+      <Route path="/">
+        <ProtectedRoute>
+          <MainLayout>
+            <DashboardPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/employees">
+        <ProtectedRoute requiredRole={['super_admin', 'admin']}>
+          <MainLayout>
+            <EmployeeListPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/employees/:id">
+        <ProtectedRoute requiredRole={['super_admin', 'admin', 'employee']}>
+          <MainLayout>
+            <EmployeeDetailPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/attendance">
+        <ProtectedRoute requiredRole={['super_admin', 'admin', 'employee']}>
+          <MainLayout>
+            <AttendancePage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/payroll">
+        <ProtectedRoute requiredRole={['super_admin', 'admin', 'employee']}>
+          <MainLayout>
+            <PayrollPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/leaves">
+        <ProtectedRoute requiredRole={['super_admin', 'admin', 'employee']}>
+          <MainLayout>
+            <LeavesPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/ess">
+        <ProtectedRoute requiredRole={['super_admin', 'admin', 'employee']}>
+          <MainLayout>
+            <ESSPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/timesheets">
+        <ProtectedRoute requiredRole={['super_admin', 'admin', 'employee']}>
+          <MainLayout>
+            <TimesheetsPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/documents">
+        <ProtectedRoute requiredRole={['super_admin', 'admin']}>
+          <MainLayout>
+            <DocumentsPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/recruitment">
+        <ProtectedRoute requiredRole={['super_admin', 'admin']}>
+          <MainLayout>
+            <RecruitmentPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/hiring-checklist">
+        <ProtectedRoute requiredRole={['super_admin', 'admin', 'employee']}>
+          <MainLayout>
+            <HiringChecklistPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/analytics">
+        <ProtectedRoute requiredRole={['super_admin', 'admin']}>
+          <MainLayout>
+            <AnalyticsPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/admin">
+        <ProtectedRoute requiredRole={['super_admin', 'admin']}>
+          <MainLayout>
+            <AdminPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/settings">
+        <ProtectedRoute requiredRole={['super_admin']}>
+          <MainLayout>
+            <SettingsPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/roles-permissions">
+        <ProtectedRoute requiredRole={['super_admin', 'admin']}>
+          <MainLayout>
+            <RolesPermissionsPage />
+          </MainLayout>
+        </ProtectedRoute>
+      </Route>
+      
+      {/* Fallback */}
+      <Route component={NotFound} />
+    </Switch>
   );
 }
 
 function App() {
   return (
     <ErrorBoundary>
-      <LanguageProvider>
-        <ThemeProvider defaultTheme="dark">
-          <TooltipProvider>
-            <Toaster />
-            <Router />
-          </TooltipProvider>
-        </ThemeProvider>
-      </LanguageProvider>
+      <AuthProvider>
+        <LanguageProvider>
+          <ThemeProvider defaultTheme="dark">
+            <TooltipProvider>
+              <Toaster />
+              <Router />
+            </TooltipProvider>
+          </ThemeProvider>
+        </LanguageProvider>
+      </AuthProvider>
     </ErrorBoundary>
   );
 }
