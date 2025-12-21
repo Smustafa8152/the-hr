@@ -17,6 +17,7 @@ import { employeeService, Employee } from '../services/employeeService';
 import { departmentService, Department } from '../services/departmentService';
 import { roleService, Role } from '../services/roleService';
 import { jobService, Job } from '../services/jobService';
+import { companySettingsService } from '../services/companySettingsService';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function EmployeeListPage() {
@@ -71,7 +72,20 @@ export default function EmployeeListPage() {
     reporting_manager_id: '',
     
     // Additional
-    notes: ''
+    notes: '',
+    
+    // Working Hours
+    monday_hours: 8,
+    tuesday_hours: 8,
+    wednesday_hours: 8,
+    thursday_hours: 8,
+    friday_hours: 8,
+    saturday_hours: 0,
+    sunday_hours: 0,
+    flexible_hours: false,
+    start_time: '09:00',
+    end_time: '17:00',
+    break_duration_minutes: 60
   });
 
   useEffect(() => {
@@ -163,8 +177,35 @@ export default function EmployeeListPage() {
         company_id: user?.company_id || null
       };
       
-      await employeeService.create(payload);
+      const createdEmployee = await employeeService.create(payload);
       await loadEmployees();
+      
+      // Save working hours if provided
+      if (user?.company_id && createdEmployee?.id) {
+        try {
+          await companySettingsService.createEmployeeWorkingHours({
+            employee_id: createdEmployee.id,
+            company_id: user.company_id,
+            monday_hours: newEmployee.monday_hours || 8,
+            tuesday_hours: newEmployee.tuesday_hours || 8,
+            wednesday_hours: newEmployee.wednesday_hours || 8,
+            thursday_hours: newEmployee.thursday_hours || 8,
+            friday_hours: newEmployee.friday_hours || 8,
+            saturday_hours: newEmployee.saturday_hours || 0,
+            sunday_hours: newEmployee.sunday_hours || 0,
+            flexible_hours: newEmployee.flexible_hours || false,
+            start_time: newEmployee.flexible_hours ? newEmployee.start_time : undefined,
+            end_time: newEmployee.flexible_hours ? newEmployee.end_time : undefined,
+            break_duration_minutes: newEmployee.break_duration_minutes || 60,
+            effective_from: new Date().toISOString().split('T')[0],
+            is_active: true
+          });
+        } catch (error) {
+          console.error('Failed to save working hours:', error);
+          // Don't fail the entire operation if working hours save fails
+        }
+      }
+      
       setIsModalOpen(false);
       // Reset form
       setNewEmployee({
@@ -193,7 +234,18 @@ export default function EmployeeListPage() {
         salary: '',
         work_location: 'Office',
         reporting_manager_id: '',
-        notes: ''
+        notes: '',
+        monday_hours: 8,
+        tuesday_hours: 8,
+        wednesday_hours: 8,
+        thursday_hours: 8,
+        friday_hours: 8,
+        saturday_hours: 0,
+        sunday_hours: 0,
+        flexible_hours: false,
+        start_time: '09:00',
+        end_time: '17:00',
+        break_duration_minutes: 60
       });
       setSelectedRoleId('');
       setAvailableJobs([]);
@@ -604,6 +656,144 @@ export default function EmployeeListPage() {
                   onChange={e => setNewEmployee({...newEmployee, notes: e.target.value})}
                   placeholder="Additional notes..."
                 />
+              </div>
+            </TabsContent>
+
+            {/* Working Hours Tab */}
+            <TabsContent value="working-hours" className="mt-6 space-y-5 focus-visible:outline-none">
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Weekday Working Hours</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Monday Hours</label>
+                    <Input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      max="24"
+                      value={newEmployee.monday_hours}
+                      onChange={e => setNewEmployee({...newEmployee, monday_hours: parseFloat(e.target.value) || 0})}
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Tuesday Hours</label>
+                    <Input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      max="24"
+                      value={newEmployee.tuesday_hours}
+                      onChange={e => setNewEmployee({...newEmployee, tuesday_hours: parseFloat(e.target.value) || 0})}
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Wednesday Hours</label>
+                    <Input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      max="24"
+                      value={newEmployee.wednesday_hours}
+                      onChange={e => setNewEmployee({...newEmployee, wednesday_hours: parseFloat(e.target.value) || 0})}
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Thursday Hours</label>
+                    <Input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      max="24"
+                      value={newEmployee.thursday_hours}
+                      onChange={e => setNewEmployee({...newEmployee, thursday_hours: parseFloat(e.target.value) || 0})}
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Friday Hours</label>
+                    <Input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      max="24"
+                      value={newEmployee.friday_hours}
+                      onChange={e => setNewEmployee({...newEmployee, friday_hours: parseFloat(e.target.value) || 0})}
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Saturday Hours</label>
+                    <Input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      max="24"
+                      value={newEmployee.saturday_hours}
+                      onChange={e => setNewEmployee({...newEmployee, saturday_hours: parseFloat(e.target.value) || 0})}
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Sunday Hours</label>
+                    <Input
+                      type="number"
+                      step="0.25"
+                      min="0"
+                      max="24"
+                      value={newEmployee.sunday_hours}
+                      onChange={e => setNewEmployee({...newEmployee, sunday_hours: parseFloat(e.target.value) || 0})}
+                      className="h-11"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-white/10 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={newEmployee.flexible_hours}
+                      onChange={e => setNewEmployee({...newEmployee, flexible_hours: e.target.checked})}
+                      className="rounded"
+                    />
+                    <label className="text-sm font-medium text-foreground">Flexible Working Hours</label>
+                  </div>
+                  
+                  {newEmployee.flexible_hours && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground">Start Time</label>
+                        <Input
+                          type="time"
+                          value={newEmployee.start_time}
+                          onChange={e => setNewEmployee({...newEmployee, start_time: e.target.value})}
+                          className="h-11"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground">End Time</label>
+                        <Input
+                          type="time"
+                          value={newEmployee.end_time}
+                          onChange={e => setNewEmployee({...newEmployee, end_time: e.target.value})}
+                          className="h-11"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-foreground">Break Duration (Minutes)</label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={newEmployee.break_duration_minutes}
+                          onChange={e => setNewEmployee({...newEmployee, break_duration_minutes: parseInt(e.target.value) || 0})}
+                          className="h-11"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </TabsContent>
           </Tabs>

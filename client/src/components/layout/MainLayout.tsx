@@ -99,14 +99,11 @@ export const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
     { icon: FileText, label: t('common.documents'), href: '/documents', roles: ['Admin', 'Consultant'] },
     { icon: BarChart3, label: t('common.analytics'), href: '/analytics', roles: ['Admin'] },
     { icon: ShieldCheck, label: t('common.admin'), href: '/admin', roles: ['Admin'] },
-    // Settings only for super_admin
-    { icon: Settings, label: t('common.settings'), href: '/settings', roles: ['SuperAdmin'], superAdminOnly: true },
+    // Settings for both super_admin and admin
+    { icon: Settings, label: t('common.settings'), href: '/settings', roles: ['Admin', 'SuperAdmin'] },
   ].filter(item => {
     // Filter by role access
-    if (!canAccess(item.roles)) return false;
-    // If superAdminOnly flag is set, only show for super_admin
-    if (item.superAdminOnly && user?.role !== 'super_admin') return false;
-    return true;
+    return canAccess(item.roles);
   });
 
   return (

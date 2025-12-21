@@ -147,7 +147,7 @@ function Router() {
       </Route>
       
       <Route path="/settings">
-        <ProtectedRoute requiredRole={['super_admin']}>
+        <ProtectedRoute requiredRole={['super_admin', 'admin']}>
           <MainLayout>
             <SettingsPage />
           </MainLayout>

@@ -9,9 +9,13 @@ import { departmentService, Department } from '../services/departmentService';
 import { roleService, Role } from '../services/roleService';
 import { jobService, Job } from '../services/jobService';
 import { companyService, Company, CreateCompanyData } from '../services/companyService';
+import { companySettingsService, CompanySettings, RoleSalaryConfig, RolePermissionsConfig } from '../services/companySettingsService';
+import { useAuth } from '../contexts/AuthContext';
+import { Clock, DollarSign, Calendar, Settings as SettingsIcon } from 'lucide-react';
 
 export default function SettingsPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('general');
   
   // Departments state
@@ -53,6 +57,38 @@ export default function SettingsPage() {
   });
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  // Company Settings state
+  const [companySettings, setCompanySettings] = useState<CompanySettings | null>(null);
+  const [roleSalaryConfigs, setRoleSalaryConfigs] = useState<RoleSalaryConfig[]>([]);
+  const [rolePermissionsConfigs, setRolePermissionsConfigs] = useState<RolePermissionsConfig[]>([]);
+  const [isCompanySettingsModalOpen, setIsCompanySettingsModalOpen] = useState(false);
+  const [isSalaryConfigModalOpen, setIsSalaryConfigModalOpen] = useState(false);
+  const [isPermissionsConfigModalOpen, setIsPermissionsConfigModalOpen] = useState(false);
+  const [newSalaryConfig, setNewSalaryConfig] = useState<Partial<RoleSalaryConfig>>({
+    role_id: '',
+    job_id: '',
+    base_salary: 0,
+    currency: 'USD',
+    housing_allowance: 0,
+    transport_allowance: 0,
+    meal_allowance: 0,
+    medical_allowance: 0,
+    other_allowances: 0,
+    tax_percentage: 0,
+    insurance_deduction: 0,
+    other_deductions: 0
+  });
+  const [newPermissionsConfig, setNewPermissionsConfig] = useState<Partial<RolePermissionsConfig>>({
+    role_id: '',
+    can_approve_leave: false,
+    can_approve_overtime: false,
+    can_view_salary: false,
+    can_edit_employee: false,
+    can_delete_employee: false,
+    can_manage_documents: false,
+    can_manage_recruitment: false
+  });
+
   useEffect(() => {
     if (activeTab === 'departments') loadDepartments();
     if (activeTab === 'roles') loadRoles();
@@ -61,7 +97,12 @@ export default function SettingsPage() {
       loadJobs();
     }
     if (activeTab === 'companies') loadCompanies();
-  }, [activeTab]);
+    if (activeTab === 'company-settings' && user?.company_id) {
+      loadCompanySettings();
+      loadRoleSalaryConfigs();
+      loadRolePermissionsConfigs();
+    }
+  }, [activeTab, user?.company_id]);
 
   const loadDepartments = async () => {
     try {
@@ -309,6 +350,161 @@ export default function SettingsPage() {
   const generateApiKey = () => {
     const key = `sk_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
     setNewCompany({ ...newCompany, api_key: key });
+  };
+
+  // Company Settings functions
+  const loadCompanySettings = async () => {
+    if (!user?.company_id) return;
+    try {
+      const settings = await companySettingsService.getCompanySettings(user.company_id);
+      console.log('Loaded company settings:', settings);
+      setCompanySettings(settings);
+    } catch (error) {
+      console.error('Failed to load company settings:', error);
+    }
+  };
+
+  const loadRoleSalaryConfigs = async () => {
+    if (!user?.company_id) return;
+    try {
+      const configs = await companySettingsService.getRoleSalaryConfigs(user.company_id);
+      console.log('Loaded role salary configs:', configs);
+      setRoleSalaryConfigs(configs);
+    } catch (error) {
+      console.error('Failed to load role salary configs:', error);
+    }
+  };
+
+  const loadRolePermissionsConfigs = async () => {
+    if (!user?.company_id) return;
+    try {
+      const configs = await companySettingsService.getRolePermissionsConfigs(user.company_id);
+      console.log('Loaded role permissions configs:', configs);
+      setRolePermissionsConfigs(configs);
+    } catch (error) {
+      console.error('Failed to load role permissions configs:', error);
+    }
+  };
+
+  const handleSaveCompanySettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.company_id) return;
+    try {
+      if (companySettings) {
+        await companySettingsService.updateCompanySettings(user.company_id, companySettings);
+      } else {
+        // Create new settings
+        const newSettings = await companySettingsService.updateCompanySettings(user.company_id, {
+          company_id: user.company_id,
+          default_working_hours_per_day: 8.00,
+          default_working_days_per_week: 5,
+          work_week_start_day: 1,
+          work_week_end_day: 5,
+          annual_leave_days_per_year: 20,
+          sick_leave_days_per_year: 10,
+          carry_forward_annual_leave: true,
+          max_carry_forward_days: 5,
+          payroll_cycle: 'monthly',
+          payroll_day: 1,
+          late_tolerance_minutes: 15,
+          overtime_threshold_hours: 8.00,
+          overtime_multiplier: 1.50,
+          timezone: 'UTC',
+          currency: 'USD'
+        } as CompanySettings);
+        setCompanySettings(newSettings);
+      }
+      alert('Company settings saved successfully!');
+    } catch (error: any) {
+      console.error('Failed to save company settings:', error);
+      alert(`Failed to save company settings: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleSaveSalaryConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.company_id) return;
+    
+    // Validate that at least one of role_id or job_id is provided
+    const roleId = newSalaryConfig.role_id && newSalaryConfig.role_id.trim() !== '' ? newSalaryConfig.role_id : null;
+    const jobId = newSalaryConfig.job_id && newSalaryConfig.job_id.trim() !== '' ? newSalaryConfig.job_id : null;
+    
+    if (!roleId && !jobId) {
+      alert('Please select either a Role or a Job for the salary configuration.');
+      return;
+    }
+    
+    try {
+      // Convert empty strings to null for UUID fields
+      const config = {
+        ...newSalaryConfig,
+        company_id: user.company_id,
+        role_id: roleId || undefined,
+        job_id: jobId || undefined,
+        effective_from: new Date().toISOString().split('T')[0],
+        is_active: true
+      } as RoleSalaryConfig;
+      
+      // Remove undefined fields to avoid sending them
+      Object.keys(config).forEach(key => {
+        if (config[key as keyof RoleSalaryConfig] === undefined) {
+          delete config[key as keyof RoleSalaryConfig];
+        }
+      });
+      
+      await companySettingsService.createRoleSalaryConfig(config);
+      await loadRoleSalaryConfigs();
+      setIsSalaryConfigModalOpen(false);
+      setNewSalaryConfig({
+        role_id: '',
+        job_id: '',
+        base_salary: 0,
+        currency: 'USD',
+        housing_allowance: 0,
+        transport_allowance: 0,
+        meal_allowance: 0,
+        medical_allowance: 0,
+        other_allowances: 0,
+        tax_percentage: 0,
+        insurance_deduction: 0,
+        other_deductions: 0
+      });
+      alert('Salary configuration saved successfully!');
+    } catch (error: any) {
+      console.error('Failed to save salary config:', error);
+      alert(`Failed to save salary config: ${error?.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleSavePermissionsConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user?.company_id || !newPermissionsConfig.role_id) return;
+    try {
+      const config = {
+        ...newPermissionsConfig,
+        company_id: user.company_id,
+        effective_from: new Date().toISOString().split('T')[0],
+        is_active: true,
+        permissions: {}
+      } as RolePermissionsConfig;
+      await companySettingsService.createRolePermissionsConfig(config);
+      await loadRolePermissionsConfigs();
+      setIsPermissionsConfigModalOpen(false);
+      setNewPermissionsConfig({
+        role_id: '',
+        can_approve_leave: false,
+        can_approve_overtime: false,
+        can_view_salary: false,
+        can_edit_employee: false,
+        can_delete_employee: false,
+        can_manage_documents: false,
+        can_manage_recruitment: false
+      });
+      alert('Permissions configuration saved successfully!');
+    } catch (error: any) {
+      console.error('Failed to save permissions config:', error);
+      alert(`Failed to save permissions config: ${error?.message || 'Unknown error'}`);
+    }
   };
 
   const renderContent = () => {
@@ -594,6 +790,274 @@ export default function SettingsPage() {
       );
     }
 
+    if (activeTab === 'company-settings' && user?.company_id) {
+      return (
+        <>
+          <CardHeader>
+            <CardTitle>Company Settings</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Working Hours Settings */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Clock size={20} /> Working Hours
+              </h3>
+              <form onSubmit={handleSaveCompanySettings} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Default Working Hours per Day</label>
+                    <Input
+                      type="number"
+                      step="0.25"
+                      value={companySettings?.default_working_hours_per_day || 8}
+                      onChange={(e) => setCompanySettings({ ...companySettings!, default_working_hours_per_day: parseFloat(e.target.value) })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Working Days per Week</label>
+                    <Input
+                      type="number"
+                      value={companySettings?.default_working_days_per_week || 5}
+                      onChange={(e) => setCompanySettings({ ...companySettings!, default_working_days_per_week: parseInt(e.target.value) })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Week Start Day</label>
+                    <Select
+                      value={String(companySettings?.work_week_start_day || 1)}
+                      onValueChange={(value) => setCompanySettings({ ...companySettings!, work_week_start_day: parseInt(value) })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">Monday</SelectItem>
+                        <SelectItem value="2">Tuesday</SelectItem>
+                        <SelectItem value="3">Wednesday</SelectItem>
+                        <SelectItem value="4">Thursday</SelectItem>
+                        <SelectItem value="5">Friday</SelectItem>
+                        <SelectItem value="6">Saturday</SelectItem>
+                        <SelectItem value="7">Sunday</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Week End Day</label>
+                    <Select
+                      value={String(companySettings?.work_week_end_day || 5)}
+                      onValueChange={(value) => setCompanySettings({ ...companySettings!, work_week_end_day: parseInt(value) })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">Monday</SelectItem>
+                        <SelectItem value="2">Tuesday</SelectItem>
+                        <SelectItem value="3">Wednesday</SelectItem>
+                        <SelectItem value="4">Thursday</SelectItem>
+                        <SelectItem value="5">Friday</SelectItem>
+                        <SelectItem value="6">Saturday</SelectItem>
+                        <SelectItem value="7">Sunday</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Leave Settings */}
+                <div className="pt-4 border-t border-white/10">
+                  <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
+                    <Calendar size={20} /> Leave Settings
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Annual Leave Days per Year</label>
+                      <Input
+                        type="number"
+                        value={companySettings?.annual_leave_days_per_year || 20}
+                        onChange={(e) => setCompanySettings({ ...companySettings!, annual_leave_days_per_year: parseInt(e.target.value) })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Sick Leave Days per Year</label>
+                      <Input
+                        type="number"
+                        value={companySettings?.sick_leave_days_per_year || 10}
+                        onChange={(e) => setCompanySettings({ ...companySettings!, sick_leave_days_per_year: parseInt(e.target.value) })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Max Carry Forward Days</label>
+                      <Input
+                        type="number"
+                        value={companySettings?.max_carry_forward_days || 5}
+                        onChange={(e) => setCompanySettings({ ...companySettings!, max_carry_forward_days: parseInt(e.target.value) })}
+                      />
+                    </div>
+                    <div className="space-y-2 flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={companySettings?.carry_forward_annual_leave || false}
+                        onChange={(e) => setCompanySettings({ ...companySettings!, carry_forward_annual_leave: e.target.checked })}
+                        className="mr-2"
+                      />
+                      <label className="text-sm font-medium">Allow Carry Forward Annual Leave</label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payroll Settings */}
+                <div className="pt-4 border-t border-white/10">
+                  <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
+                    <DollarSign size={20} /> Payroll Settings
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Payroll Cycle</label>
+                      <Select
+                        value={companySettings?.payroll_cycle || 'monthly'}
+                        onValueChange={(value: 'monthly' | 'bi-weekly' | 'weekly') => setCompanySettings({ ...companySettings!, payroll_cycle: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">Monthly</SelectItem>
+                          <SelectItem value="bi-weekly">Bi-Weekly</SelectItem>
+                          <SelectItem value="weekly">Weekly</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Payroll Day</label>
+                      <Input
+                        type="number"
+                        min="1"
+                        max="31"
+                        value={companySettings?.payroll_day || 1}
+                        onChange={(e) => setCompanySettings({ ...companySettings!, payroll_day: parseInt(e.target.value) })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Attendance Settings */}
+                <div className="pt-4 border-t border-white/10">
+                  <h3 className="text-lg font-semibold mb-4">Attendance Settings</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Late Tolerance (Minutes)</label>
+                      <Input
+                        type="number"
+                        value={companySettings?.late_tolerance_minutes || 15}
+                        onChange={(e) => setCompanySettings({ ...companySettings!, late_tolerance_minutes: parseInt(e.target.value) })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Overtime Threshold (Hours)</label>
+                      <Input
+                        type="number"
+                        step="0.25"
+                        value={companySettings?.overtime_threshold_hours || 8}
+                        onChange={(e) => setCompanySettings({ ...companySettings!, overtime_threshold_hours: parseFloat(e.target.value) })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Overtime Multiplier</label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={companySettings?.overtime_multiplier || 1.5}
+                        onChange={(e) => setCompanySettings({ ...companySettings!, overtime_multiplier: parseFloat(e.target.value) })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-white/10 flex justify-end">
+                  <Button type="submit">Save Settings</Button>
+                </div>
+              </form>
+            </div>
+
+            {/* Role/Job Salary Configuration */}
+            <div className="pt-6 border-t border-white/10">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <DollarSign size={20} /> Role/Job Salary Configuration
+                </h3>
+                <Button onClick={() => setIsSalaryConfigModalOpen(true)}>
+                  <Plus size={18} className="mr-2" />
+                  Add Salary Config
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {roleSalaryConfigs.map((config) => (
+                  <div key={config.id} className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">
+                          {config.role_id ? `Role: ${roles.find(r => r.id === config.role_id)?.name || config.role_id}` : ''}
+                          {config.job_id ? `Job: ${jobs.find(j => j.id === config.job_id)?.name || config.job_id}` : ''}
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          Base Salary: {config.currency} {config.base_salary.toLocaleString()}
+                        </div>
+                      </div>
+                      <Badge variant={config.is_active ? 'success' : 'outline'}>
+                        {config.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+                {roleSalaryConfigs.length === 0 && (
+                  <p className="text-center text-muted-foreground py-4">No salary configurations found.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Role Permissions Configuration */}
+            <div className="pt-6 border-t border-white/10">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Shield size={20} /> Role Permissions
+                </h3>
+                <Button onClick={() => setIsPermissionsConfigModalOpen(true)}>
+                  <Plus size={18} className="mr-2" />
+                  Add Permissions Config
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {rolePermissionsConfigs.map((config) => (
+                  <div key={config.id} className="p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium">
+                          Role: {roles.find(r => r.id === config.role_id)?.name || config.role_id}
+                        </div>
+                        <div className="text-sm text-muted-foreground mt-2 flex flex-wrap gap-2">
+                          {config.can_approve_leave && <Badge variant="outline">Approve Leave</Badge>}
+                          {config.can_approve_overtime && <Badge variant="outline">Approve Overtime</Badge>}
+                          {config.can_view_salary && <Badge variant="outline">View Salary</Badge>}
+                          {config.can_edit_employee && <Badge variant="outline">Edit Employee</Badge>}
+                          {config.can_manage_documents && <Badge variant="outline">Manage Documents</Badge>}
+                        </div>
+                      </div>
+                      <Badge variant={config.is_active ? 'success' : 'outline'}>
+                        {config.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+                {rolePermissionsConfigs.length === 0 && (
+                  <p className="text-center text-muted-foreground py-4">No permissions configurations found.</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </>
+      );
+    }
+
     return null;
   };
 
@@ -613,12 +1077,19 @@ export default function SettingsPage() {
               { icon: Building2, label: 'Departments', tab: 'departments' },
               { icon: Briefcase, label: 'Roles', tab: 'roles' },
               { icon: Users, label: 'Jobs', tab: 'jobs' },
-              { icon: Database, label: 'Companies', tab: 'companies' },
+              { icon: Database, label: 'Companies', tab: 'companies', superAdminOnly: true },
+              { icon: SettingsIcon, label: 'Company Settings', tab: 'company-settings', adminOnly: true },
               { icon: Bell, label: t('common.notifications'), tab: 'notifications' },
               { icon: Database, label: t('common.import'), tab: 'import' },
               { icon: Smartphone, label: 'Mobile App', tab: 'mobile' },
               { icon: Shield, label: 'Roles & Permissions', href: '/roles-permissions' },
-            ].map((item, i) => {
+            ].filter(item => {
+              // Show Companies tab only to super_admin
+              if (item.superAdminOnly && user?.role !== 'super_admin') return false;
+              // Show Company Settings tab only to admin (not super_admin)
+              if (item.adminOnly && user?.role !== 'admin') return false;
+              return true;
+            }).map((item, i) => {
               const content = (
                 <>
                   <item.icon size={18} />
@@ -859,6 +1330,234 @@ export default function SettingsPage() {
           </div>
         </form>
       </Modal>
+
+      {/* Salary Config Modal */}
+      <Modal isOpen={isSalaryConfigModalOpen} onClose={() => setIsSalaryConfigModalOpen(false)} title="Add Salary Configuration" size="xl">
+        <form onSubmit={handleSaveSalaryConfig} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Role</label>
+              <Select
+                value={newSalaryConfig.role_id || 'none'}
+                onValueChange={(value) => setNewSalaryConfig({ ...newSalaryConfig, role_id: value === 'none' ? '' : value, job_id: '' })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {roles.map(role => (
+                    <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Job</label>
+              <Select
+                value={newSalaryConfig.job_id || 'none'}
+                onValueChange={(value) => setNewSalaryConfig({ ...newSalaryConfig, job_id: value === 'none' ? '' : value, role_id: '' })}
+                disabled={!newSalaryConfig.role_id}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select job" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {jobs.filter(j => !newSalaryConfig.role_id || j.role_id === newSalaryConfig.role_id).map(job => (
+                    <SelectItem key={job.id} value={job.id}>{job.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Base Salary *</label>
+              <Input
+                type="number"
+                step="0.01"
+                required
+                value={newSalaryConfig.base_salary || 0}
+                onChange={(e) => setNewSalaryConfig({ ...newSalaryConfig, base_salary: parseFloat(e.target.value) || 0 })}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Currency</label>
+              <Select
+                value={newSalaryConfig.currency || 'USD'}
+                onValueChange={(value) => setNewSalaryConfig({ ...newSalaryConfig, currency: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USD">USD</SelectItem>
+                  <SelectItem value="KWD">KWD</SelectItem>
+                  <SelectItem value="SAR">SAR</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="pt-4 border-t border-white/10">
+            <h4 className="font-semibold mb-3">Allowances</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Housing Allowance</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={newSalaryConfig.housing_allowance || 0}
+                  onChange={(e) => setNewSalaryConfig({ ...newSalaryConfig, housing_allowance: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Transport Allowance</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={newSalaryConfig.transport_allowance || 0}
+                  onChange={(e) => setNewSalaryConfig({ ...newSalaryConfig, transport_allowance: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Meal Allowance</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={newSalaryConfig.meal_allowance || 0}
+                  onChange={(e) => setNewSalaryConfig({ ...newSalaryConfig, meal_allowance: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Medical Allowance</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={newSalaryConfig.medical_allowance || 0}
+                  onChange={(e) => setNewSalaryConfig({ ...newSalaryConfig, medical_allowance: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="pt-4 border-t border-white/10">
+            <h4 className="font-semibold mb-3">Deductions</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Tax Percentage</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={newSalaryConfig.tax_percentage || 0}
+                  onChange={(e) => setNewSalaryConfig({ ...newSalaryConfig, tax_percentage: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Insurance Deduction</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={newSalaryConfig.insurance_deduction || 0}
+                  onChange={(e) => setNewSalaryConfig({ ...newSalaryConfig, insurance_deduction: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+            <Button type="button" variant="outline" onClick={() => setIsSalaryConfigModalOpen(false)}>Cancel</Button>
+            <Button type="submit">Save</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Permissions Config Modal */}
+      <Modal isOpen={isPermissionsConfigModalOpen} onClose={() => setIsPermissionsConfigModalOpen(false)} title="Add Permissions Configuration">
+        <form onSubmit={handleSavePermissionsConfig} className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Role *</label>
+            <Select
+              value={newPermissionsConfig.role_id || ''}
+              onValueChange={(value) => setNewPermissionsConfig({ ...newPermissionsConfig, role_id: value })}
+              required
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent>
+                {roles.map(role => (
+                  <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-3 pt-4 border-t border-white/10">
+            <h4 className="font-semibold">Permissions</h4>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={newPermissionsConfig.can_approve_leave || false}
+                  onChange={(e) => setNewPermissionsConfig({ ...newPermissionsConfig, can_approve_leave: e.target.checked })}
+                />
+                <span className="text-sm">Can Approve Leave</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={newPermissionsConfig.can_approve_overtime || false}
+                  onChange={(e) => setNewPermissionsConfig({ ...newPermissionsConfig, can_approve_overtime: e.target.checked })}
+                />
+                <span className="text-sm">Can Approve Overtime</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={newPermissionsConfig.can_view_salary || false}
+                  onChange={(e) => setNewPermissionsConfig({ ...newPermissionsConfig, can_view_salary: e.target.checked })}
+                />
+                <span className="text-sm">Can View Salary</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={newPermissionsConfig.can_edit_employee || false}
+                  onChange={(e) => setNewPermissionsConfig({ ...newPermissionsConfig, can_edit_employee: e.target.checked })}
+                />
+                <span className="text-sm">Can Edit Employee</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={newPermissionsConfig.can_delete_employee || false}
+                  onChange={(e) => setNewPermissionsConfig({ ...newPermissionsConfig, can_delete_employee: e.target.checked })}
+                />
+                <span className="text-sm">Can Delete Employee</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={newPermissionsConfig.can_manage_documents || false}
+                  onChange={(e) => setNewPermissionsConfig({ ...newPermissionsConfig, can_manage_documents: e.target.checked })}
+                />
+                <span className="text-sm">Can Manage Documents</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={newPermissionsConfig.can_manage_recruitment || false}
+                  onChange={(e) => setNewPermissionsConfig({ ...newPermissionsConfig, can_manage_recruitment: e.target.checked })}
+                />
+                <span className="text-sm">Can Manage Recruitment</span>
+              </label>
+            </div>
+          </div>
+          <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+            <Button type="button" variant="outline" onClick={() => setIsPermissionsConfigModalOpen(false)}>Cancel</Button>
+            <Button type="submit">Save</Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
+

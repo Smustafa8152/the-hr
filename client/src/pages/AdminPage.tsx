@@ -4,11 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Input } from '
 import { useTranslation } from 'react-i18next';
 import { userManagementService, AdminUser, CreateAdminUserData } from '../services/userManagementService';
 import { companyService } from '../services/companyService';
+import { useAuth } from '../contexts/AuthContext';
 import Modal from '../components/common/Modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 export default function AdminPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -24,14 +26,23 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadAdmins();
-    loadCompanies();
-  }, []);
+    if (user?.role === 'super_admin') {
+      loadCompanies();
+    }
+  }, [user]);
 
   const loadAdmins = async () => {
     try {
       setLoading(true);
       const data = await userManagementService.getAllAdmins();
-      setAdmins(data);
+      // Filter by company_id if user is admin (not super_admin)
+      if (user?.role === 'admin' && user?.company_id) {
+        const filteredData = data.filter(admin => admin.company_id === user.company_id);
+        setAdmins(filteredData);
+      } else {
+        // Super admin sees all admins
+        setAdmins(data);
+      }
     } catch (error) {
       console.error('Failed to load admins:', error);
     } finally {
@@ -51,14 +62,21 @@ export default function AdminPage() {
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await userManagementService.createAdmin(newAdmin);
+      // If user is admin (not super_admin), automatically set company_id to their company
+      const adminData = {
+        ...newAdmin,
+        role: user?.role === 'admin' ? 'admin' : newAdmin.role, // Admins can only create admins
+        company_id: user?.role === 'admin' ? user.company_id : newAdmin.company_id
+      };
+      
+      await userManagementService.createAdmin(adminData);
       await loadAdmins();
       setIsModalOpen(false);
       setNewAdmin({
         email: '',
         password: '',
-        role: 'super_admin',
-        company_id: undefined,
+        role: user?.role === 'admin' ? 'admin' : 'super_admin',
+        company_id: user?.role === 'admin' ? user.company_id : undefined,
         first_name: '',
         last_name: ''
       });
@@ -257,19 +275,23 @@ export default function AdminPage() {
             <label className="text-sm font-medium">Role *</label>
             <Select
               value={newAdmin.role}
-              onValueChange={(value: 'super_admin' | 'admin') => setNewAdmin({ ...newAdmin, role: value })}
+              onValueChange={(value: 'super_admin' | 'admin') => setNewAdmin({ ...newAdmin, role: value, company_id: value === 'super_admin' ? undefined : (user?.role === 'admin' ? user.company_id : newAdmin.company_id) })}
+              disabled={user?.role === 'admin'} // Admins can only create admins
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select role" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="super_admin">Super Admin</SelectItem>
+                {user?.role === 'super_admin' && <SelectItem value="super_admin">Super Admin</SelectItem>}
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
             </Select>
+            {user?.role === 'admin' && (
+              <p className="text-xs text-muted-foreground">You can only create admin users for your company.</p>
+            )}
           </div>
 
-          {newAdmin.role === 'admin' && (
+          {newAdmin.role === 'admin' && user?.role === 'super_admin' && (
             <div className="space-y-2">
               <label className="text-sm font-medium">Company (Optional for Admin)</label>
               <Select
@@ -288,6 +310,17 @@ export default function AdminPage() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+          {newAdmin.role === 'admin' && user?.role === 'admin' && user?.company_id && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Company</label>
+              <Input
+                value={companies.find(c => c.id === user.company_id)?.name || 'Your Company'}
+                disabled
+                className="bg-white/5"
+              />
+              <p className="text-xs text-muted-foreground">Admin will be created for your company.</p>
             </div>
           )}
 
