@@ -76,6 +76,7 @@ export default function GeneratePayrollTab() {
   const [payrollYear, setPayrollYear] = useState('2024');
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [customReturnAmounts, setCustomReturnAmounts] = useState<Record<number, number>>({});
 
   // Filter employees
   const filteredEmployees = mockEmployees.filter((emp) => {
@@ -126,7 +127,10 @@ export default function GeneratePayrollTab() {
   const totalDeductions = selectedEmployeesData.reduce((sum, emp) => sum + emp.totalDeductions, 0);
   const totalNetSalary = selectedEmployeesData.reduce((sum, emp) => sum + emp.netSalary, 0);
   const totalBankTransfer = selectedEmployeesData.reduce((sum, emp) => sum + emp.bankTransferAmount, 0);
-  const totalReturnAmount = selectedEmployeesData.reduce((sum, emp) => sum + emp.returnAmount, 0);
+  const totalReturnAmount = selectedEmployeesData.reduce((sum, emp) => {
+    const customAmount = customReturnAmounts[emp.id];
+    return sum + (customAmount !== undefined ? customAmount : emp.returnAmount);
+  }, 0);
 
   return (
     <div className="space-y-6">
@@ -229,7 +233,9 @@ export default function GeneratePayrollTab() {
               </tr>
             </thead>
             <tbody>
-              {filteredEmployees.map((emp) => (
+              {filteredEmployees.map((emp) => {
+                const displayReturnAmount = customReturnAmounts[emp.id] ?? emp.returnAmount;
+                return (
                 <tr key={emp.id} className="border-t hover:bg-muted/30 transition-colors">
                   <td className="py-3 px-4">
                     <Checkbox
@@ -248,9 +254,23 @@ export default function GeneratePayrollTab() {
                   <td className="py-3 px-4 text-right text-red-600">-${emp.totalDeductions.toLocaleString()}</td>
                   <td className="py-3 px-4 text-right font-semibold">${emp.netSalary.toLocaleString()}</td>
                   <td className="py-3 px-4 text-right font-semibold text-blue-600">${emp.bankTransferAmount.toLocaleString()}</td>
-                  <td className="py-3 px-4 text-right font-semibold text-amber-600">${emp.returnAmount.toLocaleString()}</td>
+                  <td className="py-3 px-4">
+                    {selectedEmployees.includes(emp.id) ? (
+                      <Input
+                        type="number"
+                        value={displayReturnAmount}
+                        onChange={(e) => {
+                          const value = parseFloat(e.target.value) || 0;
+                          setCustomReturnAmounts({ ...customReturnAmounts, [emp.id]: value });
+                        }}
+                        className="w-28 text-right font-semibold text-amber-600"
+                      />
+                    ) : (
+                      <span className="text-right font-semibold text-amber-600">${emp.returnAmount.toLocaleString()}</span>
+                    )}
+                  </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         </div>

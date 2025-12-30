@@ -361,3 +361,10 @@
 - [x] Export payroll data (Excel, PDF)
 - [ ] Payroll approval workflow
 - [ ] Multi-currency support (if needed)
+
+
+## 🐛 Payroll Module Bug Fixes
+
+- [x] Fix Payroll Generation button not working (button appears when employees are selected)
+- [x] Add manual return amount control in Generate Payroll form (editable input field)
+- [ ] Test payroll generation flow end-to-end
