@@ -331,3 +331,188 @@ export const auditLogs = mysqlTable("auditLogs", {
 
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = typeof auditLogs.$inferInsert;
+
+
+// ============================================
+// PAYROLL MODULE TABLES
+// ============================================
+
+// Payroll Runs table
+export const payrollRuns = mysqlTable("payroll_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  periodMonth: int("periodMonth").notNull(), // 1-12
+  periodYear: int("periodYear").notNull(),
+  runDate: timestamp("runDate").defaultNow().notNull(),
+  status: mysqlEnum("status", ["Draft", "Processing", "Completed", "Cancelled"]).default("Draft").notNull(),
+  totalEmployees: int("totalEmployees").default(0),
+  totalGrossSalary: decimal("totalGrossSalary", { precision: 15, scale: 2 }).default("0"),
+  totalDeductions: decimal("totalDeductions", { precision: 15, scale: 2 }).default("0"),
+  totalNetSalary: decimal("totalNetSalary", { precision: 15, scale: 2 }).default("0"),
+  totalBankTransfer: decimal("totalBankTransfer", { precision: 15, scale: 2 }).default("0"),
+  totalReturnAmount: decimal("totalReturnAmount", { precision: 15, scale: 2 }).default("0"),
+  processedBy: int("processedBy"),
+  approvedBy: int("approvedBy"),
+  approvedAt: timestamp("approvedAt"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PayrollRun = typeof payrollRuns.$inferSelect;
+export type InsertPayrollRun = typeof payrollRuns.$inferInsert;
+
+// Payroll Details table (individual employee payslips)
+export const payrollDetails = mysqlTable("payroll_details", {
+  id: int("id").autoincrement().primaryKey(),
+  payrollRunId: int("payrollRunId").notNull(),
+  employeeId: int("employeeId").notNull(),
+  
+  // Salary Components
+  basicSalary: decimal("basicSalary", { precision: 10, scale: 2 }).notNull(),
+  housingAllowance: decimal("housingAllowance", { precision: 10, scale: 2 }).default("0"),
+  transportAllowance: decimal("transportAllowance", { precision: 10, scale: 2 }).default("0"),
+  foodAllowance: decimal("foodAllowance", { precision: 10, scale: 2 }).default("0"),
+  otherAllowances: decimal("otherAllowances", { precision: 10, scale: 2 }).default("0"),
+  overtimePay: decimal("overtimePay", { precision: 10, scale: 2 }).default("0"),
+  bonus: decimal("bonus", { precision: 10, scale: 2 }).default("0"),
+  
+  // Calculations
+  grossSalary: decimal("grossSalary", { precision: 10, scale: 2 }).notNull(),
+  
+  // Deductions
+  taxDeduction: decimal("taxDeduction", { precision: 10, scale: 2 }).default("0"),
+  socialInsurance: decimal("socialInsurance", { precision: 10, scale: 2 }).default("0"),
+  healthInsurance: decimal("healthInsurance", { precision: 10, scale: 2 }).default("0"),
+  pensionContribution: decimal("pensionContribution", { precision: 10, scale: 2 }).default("0"),
+  loanDeduction: decimal("loanDeduction", { precision: 10, scale: 2 }).default("0"),
+  advanceDeduction: decimal("advanceDeduction", { precision: 10, scale: 2 }).default("0"),
+  otherDeductions: decimal("otherDeductions", { precision: 10, scale: 2 }).default("0"),
+  totalDeductions: decimal("totalDeductions", { precision: 10, scale: 2 }).notNull(),
+  
+  // Net Salary
+  netSalary: decimal("netSalary", { precision: 10, scale: 2 }).notNull(),
+  
+  // Government Compliance Adjustment
+  governmentRegisteredAmount: decimal("governmentRegisteredAmount", { precision: 10, scale: 2 }).notNull(),
+  complianceAdjustment: decimal("complianceAdjustment", { precision: 10, scale: 2 }).default("0"),
+  returnAmount: decimal("returnAmount", { precision: 10, scale: 2 }).default("0"),
+  
+  // Final Amount
+  bankTransferAmount: decimal("bankTransferAmount", { precision: 10, scale: 2 }).notNull(),
+  finalNetPayroll: decimal("finalNetPayroll", { precision: 10, scale: 2 }).notNull(),
+  
+  // Bank Details
+  bankName: varchar("bankName", { length: 100 }),
+  accountNumber: varchar("accountNumber", { length: 50 }),
+  bankTransferReference: varchar("bankTransferReference", { length: 100 }),
+  transferDate: timestamp("transferDate"),
+  
+  // Status
+  status: mysqlEnum("status", ["Pending", "Paid", "Cancelled"]).default("Pending").notNull(),
+  paymentMethod: mysqlEnum("paymentMethod", ["Bank Transfer", "Cash", "Cheque"]).default("Bank Transfer").notNull(),
+  
+  // Metadata
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PayrollDetail = typeof payrollDetails.$inferSelect;
+export type InsertPayrollDetail = typeof payrollDetails.$inferInsert;
+
+// Payroll Returns Tracking table
+export const payrollReturns = mysqlTable("payroll_returns", {
+  id: int("id").autoincrement().primaryKey(),
+  payrollDetailId: int("payrollDetailId").notNull(),
+  employeeId: int("employeeId").notNull(),
+  payrollRunId: int("payrollRunId").notNull(),
+  
+  // Return Details
+  returnAmount: decimal("returnAmount", { precision: 10, scale: 2 }).notNull(),
+  dueDate: timestamp("dueDate").notNull(),
+  returnStatus: mysqlEnum("returnStatus", ["Pending", "Completed", "Overdue", "Waived"]).default("Pending").notNull(),
+  
+  // Completion Details
+  returnedAmount: decimal("returnedAmount", { precision: 10, scale: 2 }).default("0"),
+  returnDate: timestamp("returnDate"),
+  returnMethod: mysqlEnum("returnMethod", ["Bank Transfer", "Cash", "Salary Deduction"]).default("Bank Transfer"),
+  returnReference: varchar("returnReference", { length: 100 }),
+  
+  // Tracking
+  recordedBy: int("recordedBy"),
+  verifiedBy: int("verifiedBy"),
+  notes: text("notes"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PayrollReturn = typeof payrollReturns.$inferSelect;
+export type InsertPayrollReturn = typeof payrollReturns.$inferInsert;
+
+// Payroll Alerts table
+export const payrollAlerts = mysqlTable("payroll_alerts", {
+  id: int("id").autoincrement().primaryKey(),
+  payrollReturnId: int("payrollReturnId").notNull(),
+  employeeId: int("employeeId").notNull(),
+  
+  // Alert Details
+  alertType: mysqlEnum("alertType", ["Pending", "Overdue", "Reminder"]).notNull(),
+  alertMessage: text("alertMessage").notNull(),
+  severity: mysqlEnum("severity", ["Low", "Medium", "High", "Critical"]).default("Medium").notNull(),
+  
+  // Status
+  status: mysqlEnum("status", ["Active", "Acknowledged", "Resolved", "Dismissed"]).default("Active").notNull(),
+  acknowledgedBy: int("acknowledgedBy"),
+  acknowledgedAt: timestamp("acknowledgedAt"),
+  resolvedAt: timestamp("resolvedAt"),
+  
+  // Notification
+  notifiedUsers: text("notifiedUsers"), // JSON array of user IDs
+  notificationSent: boolean("notificationSent").default(false),
+  notificationSentAt: timestamp("notificationSentAt"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PayrollAlert = typeof payrollAlerts.$inferSelect;
+export type InsertPayrollAlert = typeof payrollAlerts.$inferInsert;
+
+// Salary Components Template table
+export const salaryComponents = mysqlTable("salary_components", {
+  id: int("id").autoincrement().primaryKey(),
+  employeeId: int("employeeId").notNull(),
+  
+  // Fixed Components
+  basicSalary: decimal("basicSalary", { precision: 10, scale: 2 }).notNull(),
+  housingAllowance: decimal("housingAllowance", { precision: 10, scale: 2 }).default("0"),
+  transportAllowance: decimal("transportAllowance", { precision: 10, scale: 2 }).default("0"),
+  foodAllowance: decimal("foodAllowance", { precision: 10, scale: 2 }).default("0"),
+  otherAllowances: decimal("otherAllowances", { precision: 10, scale: 2 }).default("0"),
+  
+  // Government Registration
+  governmentRegisteredAmount: decimal("governmentRegisteredAmount", { precision: 10, scale: 2 }).notNull(),
+  
+  // Deduction Percentages
+  taxPercentage: decimal("taxPercentage", { precision: 5, scale: 2 }).default("0"),
+  socialInsurancePercentage: decimal("socialInsurancePercentage", { precision: 5, scale: 2 }).default("0"),
+  healthInsurancePercentage: decimal("healthInsurancePercentage", { precision: 5, scale: 2 }).default("0"),
+  pensionPercentage: decimal("pensionPercentage", { precision: 5, scale: 2 }).default("0"),
+  
+  // Bank Details
+  bankName: varchar("bankName", { length: 100 }),
+  accountNumber: varchar("accountNumber", { length: 50 }),
+  iban: varchar("iban", { length: 50 }),
+  
+  // Status
+  isActive: boolean("isActive").default(true).notNull(),
+  effectiveFrom: timestamp("effectiveFrom").defaultNow().notNull(),
+  effectiveTo: timestamp("effectiveTo"),
+  
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SalaryComponent = typeof salaryComponents.$inferSelect;
+export type InsertSalaryComponent = typeof salaryComponents.$inferInsert;
