@@ -52,7 +52,7 @@ export const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
     { icon: Clock, label: t('common.attendance'), href: '/attendance', roles: ['Admin', 'Employee'] },
     { icon: Calendar, label: t('common.leaves'), href: '/leaves', roles: ['Admin', 'Employee'] },
     { icon: DollarSign, label: t('common.payroll'), href: '/payroll', roles: ['Admin'] },
-    { icon: Users, label: 'Self Service', href: '/ess', roles: ['Admin', 'Employee', 'Consultant'] },
+    { icon: Users, label: 'Self Service', href: '/self-service', roles: ['Admin', 'Employee', 'Consultant'] },
     { icon: Clock, label: 'Timesheets', href: '/timesheets', roles: ['Admin', 'Employee', 'Consultant'] },
     { icon: Briefcase, label: t('common.recruitment'), href: '/recruitment', roles: ['Admin'] },
     { icon: ClipboardCheck, label: 'Hiring Checklist', href: '/hiring-checklist', roles: ['Admin', 'Employee'] },

@@ -108,5 +108,86 @@
 - [x] Update favicon
 - [x] Update README.md with new branding
 - [x] Update all documentation files
-- [ ] Update GitHub repository description
-- [ ] Push rebranding to GitHub
+- [x] Update GitHub repository description
+- [x] Rename GitHub repository to nzsuite-hr-frontend
+- [x] Push rebranding to GitHub
+
+
+## 🚀 Self-Service Module Enhancement
+
+### A) Employee Dashboard Redesign
+- [x] Create modern KPI cards layout (4 cards: Check-in Time, Leave Balance, Next Payday, Pending Requests)
+- [x] Add "Submit Request" primary button in header
+- [x] Create "Recent Payslips" panel (last 3 payslips)
+- [x] Create "My Requests" panel (last 5 requests with status chips)
+- [x] Add empty states for both panels
+- [x] Implement responsive mobile layout
+- [x] Add data refresh after request submission
+
+### B) Reusable Components
+- [x] Create Modal component (reusable dialog)
+- [x] Create Stepper component (multi-step wizard)
+- [x] Create DynamicForm component (config-driven forms)
+- [x] Create StatusBadge component (Approved/Rejected/Pending/In Review)
+- [x] Create EmptyState component (no data placeholder)
+
+### C) Request Configuration System
+- [x] Create selfServiceRequests.ts config file
+- [x] Define 7 primary categories
+- [x] Define 14 request types with field configurations
+- [x] Implement conditional field validation
+- [x] Add file upload rules (types, sizes)
+- [x] Create TypeScript types (Employee, Payslip, Request, RequestStatus, Category, FieldConfig)
+
+### D) Submit Request Modal (14 Request Types)
+- [x] Step 1: Category selection (7 tiles)
+- [x] Step 2: Request type selection
+- [x] Step 3: Dynamic form rendering
+- [x] 1. Leave Request (with conditional attachment for sick leave)
+- [x] 2. Permission / Early Leave
+- [x] 3. Attendance Correction
+- [x] 4. Payslip Inquiry / Payroll Issue
+- [x] 5. Advance / Loan
+- [x] 6. Expense Reimbursement
+- [x] 7. Update Personal Data
+- [x] 8. Salary Certificate
+- [x] 9. Experience Letter
+- [x] 10. Training Request
+- [x] 11. Asset Request
+- [x] 12. IT Support Ticket
+- [x] 13. Complaint / Grievance (Sensitive)
+- [x] 14. Resignation (Sensitive)
+- [x] Add form validation and submission
+- [x] Show success toast and refresh dashboard
+
+### E) My Requests Page
+- [x] Create requests list table
+- [x] Add filters (Status, Category, Date range)
+- [x] Add search by type/reference
+- [x] Create request detail drawer/modal
+- [x] Show approval timeline
+- [x] Show comments and attachments
+- [x] Add audit trail
+
+### F) My Payslips Page
+- [x] Create payslips list by month
+- [x] Add view/download actions
+- [x] Add empty state
+
+### G) Workflow & Approvals
+- [x] Implement workflow routing logic
+- [x] Attendance/Leaves -> Manager -> HR
+- [x] Payroll/Finance -> Finance -> HR
+- [x] Administrative -> HR
+- [x] Letters/Certificates -> HR
+- [x] Training -> Manager -> HR
+- [x] Assets/IT -> IT/Assets -> Manager
+- [x] Sensitive -> HR only (bypass manager if confidential)
+
+### H) Mock Services (if APIs not ready)
+- [x] GET /attendance/today
+- [x] GET /leave/balance
+- [x] GET /payroll/next-payday
+- [x] GET /self-service/requests
+- [x] GET /payroll/payslips
+- [x] POST /self-service/requests

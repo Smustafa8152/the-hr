@@ -22,6 +22,9 @@ import AdminPage from "./pages/AdminPage";
 import SettingsPage from "./pages/SettingsPage";
 import HiringChecklistPage from "./pages/HiringChecklistPage";
 import RolesPermissionsPage from "./pages/RolesPermissionsPage";
+import EmployeeDashboard from "./pages/EmployeeDashboard";
+import MyRequestsPage from "./pages/MyRequestsPage";
+import MyPayslipsPage from "./pages/MyPayslipsPage";
 import './utils/i18n';
 
 // Placeholder pages for routes not yet implemented
@@ -46,6 +49,9 @@ function Router() {
         <Route path="/leaves" component={LeavesPage} />
         <Route path="/recruitment" component={RecruitmentPage} />
         <Route path="/ess" component={ESSPage} />
+        <Route path="/self-service" component={EmployeeDashboard} />
+        <Route path="/self-service/requests" component={MyRequestsPage} />
+        <Route path="/self-service/payslips" component={MyPayslipsPage} />
         <Route path="/timesheets" component={TimesheetsPage} />
         <Route path="/documents" component={DocumentsPage} />
         <Route path="/analytics" component={AnalyticsPage} />
