@@ -378,3 +378,90 @@
 - [x] Modify payroll generation to use employee default return amounts
 - [x] Add warning indicator when return amount is manually overridden
 - [x] Test end-to-end flow from employee profile to payroll generation
+
+
+## 📱 React Native Mobile App - NZSuite
+
+### A) Project Setup
+- [ ] Initialize React Native project structure
+- [ ] Install required dependencies (React Navigation, Expo modules, etc.)
+- [ ] Configure TypeScript
+- [ ] Set up folder structure (screens, components, services, navigation)
+- [ ] Configure environment variables
+
+### B) Authentication System
+- [ ] Create Login screen with role selection (Admin/Employee)
+- [ ] Implement JWT authentication
+- [ ] Add biometric authentication (Face ID/Touch ID)
+- [ ] Create secure token storage
+- [ ] Implement auto-login with biometrics
+- [ ] Add logout functionality
+
+### C) Admin Mobile Interface
+- [ ] Dashboard screen with KPI cards
+- [ ] Employee list and management
+- [ ] Leave approval interface
+- [ ] Payroll management (view/approve)
+- [ ] Attendance overview
+- [ ] Reports and analytics
+- [ ] Settings and configuration
+
+### D) Employee Mobile Interface (Limited Access)
+- [ ] Personal dashboard
+- [ ] Profile view and edit
+- [ ] Submit requests (leave, permission, etc.)
+- [ ] View payslips
+- [ ] Attendance history
+- [ ] Leave balance display
+- [ ] Timesheets
+- [ ] Documents viewer
+
+### E) Face ID Punch In/Out with Location
+- [ ] Implement Face ID/Touch ID verification
+- [ ] Add location services (GPS tracking)
+- [ ] Create punch in/out screen
+- [ ] Capture location coordinates on punch
+- [ ] Store attendance with location data
+- [ ] Add geofencing (optional - verify user is at office)
+- [ ] Show punch history with map view
+- [ ] Add photo capture on punch (optional)
+
+### F) Push Notifications
+- [ ] Configure Firebase Cloud Messaging (FCM)
+- [ ] Implement notification service
+- [ ] Send notifications for:
+  - [ ] Leave request status updates
+  - [ ] Payslip availability
+  - [ ] Pending approvals (Admin)
+  - [ ] Attendance reminders
+  - [ ] Return payment reminders
+
+### G) Offline Mode
+- [ ] Implement local storage (AsyncStorage/SQLite)
+- [ ] Cache employee data
+- [ ] Cache payslips
+- [ ] Queue punch in/out when offline
+- [ ] Sync data when online
+
+### H) Additional Features
+- [ ] Dark/light theme toggle
+- [ ] Multi-language support (English/Arabic)
+- [ ] Pull-to-refresh functionality
+- [ ] Loading states and error handling
+- [ ] Network status indicator
+- [ ] App version display
+
+### I) API Integration
+- [ ] Connect to existing tRPC backend
+- [ ] Create mobile-specific API endpoints if needed
+- [ ] Implement API error handling
+- [ ] Add request/response interceptors
+
+### J) Testing & Deployment
+- [ ] Test on iOS simulator
+- [ ] Test on Android emulator
+- [ ] Test biometric authentication
+- [ ] Test location services
+- [ ] Build APK for Android
+- [ ] Build IPA for iOS
+- [ ] Create app icons and splash screens
