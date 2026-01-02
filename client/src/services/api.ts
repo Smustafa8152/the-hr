@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { supabase } from './supabase';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -30,6 +31,66 @@ export const adminApi = axios.create({
     'Prefer': 'return=representation'
   }
 });
+
+// Helper function to check if a token is a valid JWT
+const isValidJWT = (token: string): boolean => {
+  if (!token || typeof token !== 'string') return false;
+  const parts = token.split('.');
+  return parts.length === 3 && parts.every(part => part.length > 0);
+};
+
+// Cache for Supabase session to avoid repeated async calls
+let cachedSession: { access_token: string; expires_at: number } | null = null;
+let sessionCacheTime = 0;
+const SESSION_CACHE_DURATION = 60000; // 1 minute
+
+// Add request interceptor to include access token for RLS
+api.interceptors.request.use(
+  config => {
+    // First, check cached session (synchronous)
+    const now = Date.now();
+    if (cachedSession && now < sessionCacheTime) {
+      if (isValidJWT(cachedSession.access_token)) {
+        config.headers.Authorization = `Bearer ${cachedSession.access_token}`;
+        return config;
+      }
+    }
+    
+    // Check sessionStorage/localStorage synchronously
+    const accessToken = sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
+    if (accessToken && isValidJWT(accessToken) && accessToken !== SUPABASE_ANON_KEY) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
+      // Cache it
+      cachedSession = { access_token: accessToken, expires_at: 0 };
+      sessionCacheTime = now + SESSION_CACHE_DURATION;
+      return config;
+    }
+    
+    // If no valid token found, use default anon key (already set in default headers)
+    // Don't try async Supabase session here to avoid breaking synchronous requests
+    
+    return config;
+  },
+  error => {
+    return Promise.reject(error);
+  }
+);
+
+// Periodically refresh Supabase session in background
+setInterval(async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token && isValidJWT(session.access_token)) {
+      cachedSession = {
+        access_token: session.access_token,
+        expires_at: session.expires_at || 0
+      };
+      sessionCacheTime = Date.now() + SESSION_CACHE_DURATION;
+    }
+  } catch (error) {
+    // Silently fail
+  }
+}, 30000); // Check every 30 seconds
 
 // Add response interceptor for error handling
 api.interceptors.response.use(

@@ -415,7 +415,7 @@ export default function DocumentRequestsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {employeeDocuments.length === 0 ? (
-                        <SelectItem value="" disabled>No documents available</SelectItem>
+                        <SelectItem value="no-documents" disabled>No documents available</SelectItem>
                       ) : (
                         employeeDocuments.map((doc) => (
                           <SelectItem key={doc.id} value={doc.id}>

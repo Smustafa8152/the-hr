@@ -13,6 +13,7 @@ import { employeeRequestService, EmployeeRequest } from '../services/employeeReq
 import { documentRequestService, DocumentRequest } from '../services/documentRequestService';
 import { leaveService, LeaveRequest } from '../services/leaveService';
 import { companySettingsService, EmployeeShift, EmployeeWorkingHours } from '../services/companySettingsService';
+import { timesheetService, TimesheetEntry } from '../services/timesheetService';
 import { useAuth } from '../contexts/AuthContext';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { Calendar as CalendarIcon, FileText as FileTextIcon, Users, Home, Fingerprint, CheckCircle2, XCircle, Clock, HelpCircle, ExternalLink, ChevronRight, ChevronLeft } from 'lucide-react';
@@ -545,6 +546,7 @@ export default function EmployeeProfilePage() {
   const [employeeShifts, setEmployeeShifts] = useState<EmployeeShift[]>([]);
   const [workingHours, setWorkingHours] = useState<EmployeeWorkingHours | null>(null);
   const [reportingManagerChain, setReportingManagerChain] = useState<Employee[]>([]);
+  const [timesheetEntries, setTimesheetEntries] = useState<TimesheetEntry[]>([]);
 
   useEffect(() => {
     loadEmployee();
@@ -560,6 +562,7 @@ export default function EmployeeProfilePage() {
       loadRequests();
       loadWorkingHours();
       loadReportingManagerChain();
+      loadTimesheetEntries();
     }
   }, [employee?.id]);
 
@@ -686,6 +689,16 @@ export default function EmployeeProfilePage() {
       setReportingManagerChain(chain);
     } catch (error) {
       console.error('Failed to load reporting manager chain', error);
+    }
+  };
+
+  const loadTimesheetEntries = async () => {
+    if (!employee?.id) return;
+    try {
+      const entries = await timesheetService.getByEmployee(employee.id);
+      setTimesheetEntries(entries);
+    } catch (error) {
+      console.error('Failed to load timesheet entries', error);
     }
   };
 
@@ -1459,6 +1472,88 @@ export default function EmployeeProfilePage() {
                 )}
                 {leaveRequests.length === 0 && documentRequests.length === 0 && employeeRequests.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground">No requests found</div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* Timesheet Section */}
+          <AccordionItem value="timesheet">
+            <AccordionTrigger className="px-4 md:px-6">
+              <div className="flex items-center gap-3">
+                <Clock size={18} className="text-blue-400 md:w-5 md:h-5" />
+                <div className="text-left">
+                  <div className="font-semibold text-sm md:text-base">Timesheet</div>
+                  <div className="text-[10px] md:text-xs text-muted-foreground">Work hours & reports</div>
+                </div>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-4 md:px-6 pb-6">
+              <div className="space-y-4">
+                {timesheetEntries.length > 0 ? (
+                  <>
+                    <div className="text-sm font-semibold mb-2 flex items-center gap-2">
+                      <Clock size={16} /> Recent Entries ({timesheetEntries.length})
+                    </div>
+                    <div className="space-y-2">
+                      {timesheetEntries.slice(0, 10).map((entry) => (
+                        <div key={entry.id} className="p-3 rounded-lg bg-white/5 border border-white/10">
+                          {/* Header: Date and Status */}
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <Calendar size={14} className="text-muted-foreground flex-shrink-0" />
+                            <span className="font-semibold text-xs md:text-sm">
+                              {new Date(entry.date).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric'
+                              })}
+                            </span>
+                            <StatusBadge status={entry.is_submitted ? 'Completed' : 'Draft'} />
+                          </div>
+                          
+                          {/* Details: Hours, Project, Type */}
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 mb-2">
+                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                              <Clock size={12} className="flex-shrink-0" />
+                              <span className="font-medium text-foreground">{entry.hours_worked}h</span>
+                            </span>
+                            {entry.project_name && (
+                              <span className="text-xs text-muted-foreground">
+                                <span className="font-medium">Project:</span> {entry.project_name}
+                              </span>
+                            )}
+                            {entry.task_type && (
+                              <Badge variant="outline" className="text-xs w-fit">{entry.task_type}</Badge>
+                            )}
+                          </div>
+                          
+                          {/* Description */}
+                          {entry.description && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{entry.description}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="pt-2 border-t border-white/10">
+                      <a
+                        href="/self-service/timesheet"
+                        className="text-sm text-primary hover:underline font-medium"
+                      >
+                        View All Timesheet Entries →
+                      </a>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Clock size={48} className="mx-auto mb-4 opacity-50" />
+                    <p>No timesheet entries found</p>
+                    <a
+                      href="/self-service/timesheet"
+                      className="text-sm text-primary hover:underline mt-2 inline-block"
+                    >
+                      Log Time →
+                    </a>
+                  </div>
                 )}
               </div>
             </AccordionContent>

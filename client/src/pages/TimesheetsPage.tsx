@@ -1,161 +1,271 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Save, Upload, Plus } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, Button, Input, Badge } from '../components/common/UIComponents';
+import { Calendar, Clock, Filter, Download, Search, User, CheckCircle, XCircle } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '../components/common/UIComponents';
 import { timesheetService, TimesheetEntry } from '../services/timesheetService';
+import { employeeService, Employee } from '../services/employeeService';
+import { toast } from 'sonner';
+import { StatusBadge } from '../components/common/StatusBadge';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 export default function TimesheetsPage() {
-  const [week, setWeek] = useState('2025-W51');
-  const [entries, setEntries] = useState<TimesheetEntry[]>([]);
+  const [timesheetEntries, setTimesheetEntries] = useState<TimesheetEntry[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUserId, setCurrentUserId] = useState<string>('');
-  
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const [filters, setFilters] = useState({
+    employee_id: '',
+    dateFrom: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0],
+    dateTo: new Date().toISOString().split('T')[0],
+    report_type: '' as 'daily' | 'weekly' | ''
+  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const itemsPerPage = 20;
 
   useEffect(() => {
-    loadData();
-  }, [week]);
+    loadEmployees();
+  }, []);
 
-  const loadData = async () => {
-    setLoading(true);
+  useEffect(() => {
+    loadTimesheetEntries();
+  }, [filters, currentPage]);
+
+  const loadEmployees = async () => {
     try {
-      // Get first employee to simulate logged-in user
-      const employees = await import('../services/employeeService').then(m => m.employeeService.getAll());
-      if (employees.length === 0) {
-        setLoading(false);
-        return;
-      }
-      
-      const userId = employees[0].id.toString();
-      setCurrentUserId(userId);
-
-      const data = await timesheetService.getMyTimesheets(userId, week);
-      // If no data, initialize with empty rows
-      if (data.length === 0) {
-        setEntries([
-          { id: 'new-1', employee_id: userId.toString(), week, project: 'Project Alpha', hours: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 }, status: 'Draft', total_hours: 0 },
-          { id: 'new-2', employee_id: userId.toString(), week, project: 'Internal Ops', hours: { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 }, status: 'Draft', total_hours: 0 }
-        ]);
-      } else {
-        setEntries(data);
-      }
+      const allEmployees = await employeeService.getAll();
+      setEmployees(allEmployees);
     } catch (error) {
-      console.error('Failed to load timesheets:', error);
+      console.error('Failed to load employees:', error);
+    }
+  };
+
+  const loadTimesheetEntries = async () => {
+    try {
+      setLoading(true);
+      const response = await timesheetService.getAll({
+        ...filters,
+        employee_id: filters.employee_id || undefined,
+        report_type: filters.report_type || undefined,
+        page: currentPage,
+        limit: itemsPerPage
+      });
+      setTimesheetEntries(response.data);
+      setTotalCount(response.totalCount);
+    } catch (error) {
+      console.error('Failed to load timesheet entries:', error);
+      toast.error('Failed to load timesheet entries');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleHourChange = (index: number, day: string, value: string) => {
-    const newEntries = [...entries];
-    newEntries[index].hours[day] = Number(value) || 0;
-    
-    // Recalculate total
-    newEntries[index].total_hours = Object.values(newEntries[index].hours).reduce((a, b) => a + b, 0);
-    setEntries(newEntries);
-  };
-
-  const handleSave = async () => {
-    try {
-      // In a real app, we would loop and save each entry
-      alert('Timesheet saved successfully!');
-    } catch (error) {
-      console.error('Failed to save timesheet:', error);
+  const getEmployeeName = (employeeId: string) => {
+    const employee = employees.find(e => e.id === employeeId);
+    if (employee) {
+      return `${employee.first_name || employee.firstName} ${employee.last_name || employee.lastName}`;
     }
+    return employeeId;
   };
 
-  const totalWeeklyHours = entries.reduce((acc, curr) => acc + (curr.total_hours || 0), 0);
+  const totalPages = Math.ceil(totalCount / itemsPerPage);
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold font-heading">Timesheets</h1>
-          <p className="text-muted-foreground">Track project hours and tasks</p>
-        </div>
-        <div className="flex gap-3">
-          <Button variant="outline" className="gap-2">
-            <Upload size={16} /> Import Excel
-          </Button>
-          <Button className="gap-2" onClick={handleSave}>
-            <Save size={16} /> Submit Week
-          </Button>
+          <h1 className="text-3xl font-bold">Timesheets</h1>
+          <p className="text-muted-foreground">View submitted timesheet reports from employees</p>
         </div>
       </div>
 
+      {/* Filters */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Input 
-              type="week" 
-              value={week} 
-              onChange={(e) => setWeek(e.target.value)}
-              className="w-48"
-            />
-            <Badge variant="warning">Draft</Badge>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-muted-foreground">Total Hours</p>
-            <p className="text-2xl font-bold font-mono text-primary">{totalWeeklyHours}</p>
-          </div>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter size={20} />
+            Filters
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs text-muted-foreground uppercase bg-white/5">
-                <tr>
-                  <th className="px-4 py-3 rounded-l-lg">Project / Task</th>
-                  {days.map(day => (
-                    <th key={day} className="px-2 py-3 text-center w-16">{day}</th>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <Label>Employee</Label>
+              <Select
+                value={filters.employee_id || 'all'}
+                onValueChange={(value) => setFilters({ ...filters, employee_id: value === 'all' ? '' : value, currentPage: 1 })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Employees" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Employees</SelectItem>
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.first_name || emp.firstName} {emp.last_name || emp.lastName}
+                    </SelectItem>
                   ))}
-                  <th className="px-4 py-3 text-right rounded-r-lg">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {loading ? (
-                  <tr><td colSpan={9} className="text-center py-8">Loading...</td></tr>
-                ) : entries.map((entry, i) => (
-                  <tr key={entry.id} className="hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-3 font-medium">
-                      <Input 
-                        value={entry.project} 
-                        onChange={(e) => {
-                          const newEntries = [...entries];
-                          newEntries[i].project = e.target.value;
-                          setEntries(newEntries);
-                        }}
-                        className="h-8 bg-transparent border-none focus:bg-white/5"
-                      />
-                    </td>
-                    {days.map(day => (
-                      <td key={day} className="px-2 py-3">
-                        <input 
-                          type="number" 
-                          className="w-full bg-transparent text-center border border-white/10 rounded focus:border-primary focus:outline-none py-1"
-                          value={entry.hours[day] || ''}
-                          onChange={(e) => handleHourChange(i, day, e.target.value)}
-                        />
-                      </td>
-                    ))}
-                    <td className="px-4 py-3 text-right font-bold font-mono">
-                      {entry.total_hours || 0}
-                    </td>
-                  </tr>
-                ))}
-                <tr>
-                  <td colSpan={9} className="px-4 py-3">
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="text-primary gap-2 pl-0 hover:bg-transparent hover:underline"
-                      onClick={() => setEntries([...entries, { id: `new-${Date.now()}`, employee_id: currentUserId, week, project: 'New Task', hours: {}, status: 'Draft', total_hours: 0 }])}
-                    >
-                      <Plus size={14} /> Add Row
-                    </Button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>From Date</Label>
+              <Input
+                type="date"
+                value={filters.dateFrom}
+                onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value, currentPage: 1 })}
+              />
+            </div>
+            <div>
+              <Label>To Date</Label>
+              <Input
+                type="date"
+                value={filters.dateTo}
+                onChange={(e) => setFilters({ ...filters, dateTo: e.target.value, currentPage: 1 })}
+              />
+            </div>
+            <div>
+              <Label>Report Type</Label>
+              <Select
+                value={filters.report_type || 'all'}
+                onValueChange={(value: 'daily' | 'weekly' | 'all') => setFilters({ ...filters, report_type: value === 'all' ? '' : value, currentPage: 1 })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="daily">Daily</SelectItem>
+                  <SelectItem value="weekly">Weekly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Timesheet Entries Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Submitted Timesheet Reports</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            </div>
+          ) : timesheetEntries.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+              <p>No submitted timesheet reports found</p>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-muted-foreground uppercase bg-white/5">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Date</th>
+                      <th className="px-4 py-3 text-left">Employee</th>
+                      <th className="px-4 py-3 text-center">Hours</th>
+                      <th className="px-4 py-3 text-left">Project</th>
+                      <th className="px-4 py-3 text-left">Task Type</th>
+                      <th className="px-4 py-3 text-left">Description</th>
+                      <th className="px-4 py-3 text-center">Report Type</th>
+                      <th className="px-4 py-3 text-center">Submitted At</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {timesheetEntries.map((entry) => (
+                      <tr key={entry.id} className="hover:bg-white/5 transition-colors">
+                        <td className="px-4 py-3">
+                          {new Date(entry.date).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <User size={16} className="text-muted-foreground" />
+                            <span className="font-medium">
+                              {entry.employees 
+                                ? `${entry.employees.first_name} ${entry.employees.last_name}`
+                                : getEmployeeName(entry.employee_id)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center font-semibold">
+                          {entry.hours_worked}h
+                        </td>
+                        <td className="px-4 py-3">
+                          {entry.project_name || 'N/A'}
+                        </td>
+                        <td className="px-4 py-3">
+                          {entry.task_type ? (
+                            <Badge variant="outline">{entry.task_type}</Badge>
+                          ) : (
+                            'N/A'
+                          )}
+                        </td>
+                        <td className="px-4 py-3 max-w-xs">
+                          <p className="truncate text-muted-foreground">
+                            {entry.description || 'N/A'}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Badge variant={entry.report_type === 'weekly' ? 'secondary' : 'default'}>
+                            {entry.report_type || 'daily'}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-center text-xs text-muted-foreground">
+                          {entry.submitted_at
+                            ? new Date(entry.submitted_at).toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })
+                            : 'N/A'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/10">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalCount)} of {totalCount} entries
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

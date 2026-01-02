@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRoute } from 'wouter';
 import { useTranslation } from 'react-i18next';
-import { User, FileText, Clock, DollarSign, Shield, ArrowLeft, Upload, Download, MapPin, Phone, Mail, Calendar, Briefcase, Building2, X, Trash2, GraduationCap, CreditCard, Plus, Edit2, Globe, FileCheck, AlertCircle, Users, Home, Fingerprint, CheckCircle2, HelpCircle, ChevronRight, ChevronLeft } from 'lucide-react';
+import { User, FileText, Clock, DollarSign, Shield, ArrowLeft, Upload, Download, MapPin, Phone, Mail, Calendar, Briefcase, Building2, X, Trash2, GraduationCap,CheckCircle, CreditCard, Plus, Edit2, Globe, FileCheck, AlertCircle, Users, Home, Fingerprint, CheckCircle2, HelpCircle, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Tabs, TabsList, TabsTrigger, TabsContent } from '../components/common/UIComponents';
 import { employeeService, Employee } from '../services/employeeService';
 import { documentService, Document } from '../services/documentService';
@@ -15,6 +15,7 @@ import { employeeRequestService, EmployeeRequest } from '../services/employeeReq
 import { documentRequestService, DocumentRequest } from '../services/documentRequestService';
 import { leaveService, LeaveRequest } from '../services/leaveService';
 import { companySettingsService, EmployeeShift, EmployeeWorkingHours } from '../services/companySettingsService';
+import { timesheetService, TimesheetEntry } from '../services/timesheetService';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from '../components/common/Modal';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -592,6 +593,7 @@ export default function EmployeeDetailPage() {
     use_company_default: true
   });
   const [reportingManagerChain, setReportingManagerChain] = useState<Employee[]>([]);
+  const [timesheetEntries, setTimesheetEntries] = useState<any[]>([]);
 
   useEffect(() => {
     if (params?.id) {
@@ -623,6 +625,9 @@ export default function EmployeeDetailPage() {
     }
     if (employee?.id && activeTab === 'working-hours') {
       loadWorkingHours();
+    }
+    if (employee?.id && activeTab === 'timesheet') {
+      loadTimesheetEntries();
     }
   }, [employee?.id, activeTab]);
 
@@ -1127,6 +1132,18 @@ export default function EmployeeDetailPage() {
     }
   };
 
+  const loadTimesheetEntries = async () => {
+    if (!employee?.id) return;
+    try {
+      const entries = await timesheetService.getByEmployee(employee.id, {
+        is_submitted: true // Only show submitted entries to admin
+      });
+      setTimesheetEntries(entries);
+    } catch (error) {
+      console.error('Failed to load timesheet entries', error);
+    }
+  };
+
   // Calculate hours from shift times
   const calculateHours = (startTime: string, endTime: string, breakMinutes: number = 0): number => {
     if (!startTime || !endTime) return 0;
@@ -1324,83 +1341,103 @@ export default function EmployeeDetailPage() {
         </div>
       </div>
 
-      {/* Modern Tabs Navigation */}
+      {/* Modern Tabs Navigation - Redesigned */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="relative">
-          <TabsList className="grid w-full grid-cols-11 bg-card/50 backdrop-blur-md border border-white/10 p-1.5 rounded-xl shadow-lg overflow-x-auto">
-            <TabsTrigger 
-              value="personal" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              {t('employees.personalInfo')}
-            </TabsTrigger>
-            <TabsTrigger 
-              value="contact" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              {t('employees.contactInfo')}
-            </TabsTrigger>
-            <TabsTrigger 
-              value="employment" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              {t('employees.employmentDetails')}
-            </TabsTrigger>
-            <TabsTrigger 
-              value="working-hours" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              {t('employees.workingHours')}
-            </TabsTrigger>
-            <TabsTrigger 
-              value="payroll" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              {t('employees.payrollInfo') || 'Payroll'}
-            </TabsTrigger>
-            <TabsTrigger 
-              value="leave-balance" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              Leave Balance
-            </TabsTrigger>
-            <TabsTrigger 
-              value="education" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              Education
-            </TabsTrigger>
-            <TabsTrigger 
-              value="bank" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              Bank
-            </TabsTrigger>
-            <TabsTrigger 
-              value="immigration" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              Immigration
-            </TabsTrigger>
-            <TabsTrigger 
-              value="attendance-location" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              Attendance Location
-            </TabsTrigger>
-            <TabsTrigger 
-              value="requests" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              Requests
-            </TabsTrigger>
-            <TabsTrigger 
-              value="documents" 
-              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
-            >
-              {t('employees.documents')}
-            </TabsTrigger>
-        </TabsList>
+        <div className="relative mb-6">
+          {/* Gradient Background */}
+          <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 rounded-2xl blur-xl -z-10" />
+          
+          {/* Scrollable Tab Container */}
+          <div className="relative bg-card/80 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-2xl overflow-hidden">
+            {/* Scrollable Tabs */}
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {[
+                { value: 'personal', icon: User, label: t('employees.personalInfo'), color: 'from-blue-500 to-cyan-500' },
+                { value: 'contact', icon: Phone, label: t('employees.contactInfo'), color: 'from-green-500 to-emerald-500' },
+                { value: 'employment', icon: Briefcase, label: t('employees.employmentDetails'), color: 'from-purple-500 to-violet-500' },
+                { value: 'working-hours', icon: Clock, label: t('employees.workingHours'), color: 'from-orange-500 to-amber-500' },
+                { value: 'payroll', icon: DollarSign, label: t('employees.payrollInfo') || 'Payroll', color: 'from-yellow-500 to-yellow-400' },
+                { value: 'leave-balance', icon: Calendar, label: 'Leave Balance', color: 'from-pink-500 to-rose-500' },
+                { value: 'education', icon: GraduationCap, label: 'Education', color: 'from-indigo-500 to-blue-500' },
+                { value: 'bank', icon: CreditCard, label: 'Bank', color: 'from-teal-500 to-cyan-500' },
+                { value: 'immigration', icon: Globe, label: 'Immigration', color: 'from-violet-500 to-purple-500' },
+                { value: 'attendance-location', icon: MapPin, label: 'Attendance Location', color: 'from-red-500 to-orange-500' },
+                { value: 'timesheet', icon: Clock, label: 'Timesheet', color: 'from-slate-500 to-gray-500' },
+                { value: 'requests', icon: FileTextIcon, label: 'Requests', color: 'from-cyan-500 to-blue-500' },
+                { value: 'documents', icon: FileText, label: t('employees.documents'), color: 'from-blue-500 to-indigo-500' },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.value;
+                
+                return (
+                  <button
+                    key={tab.value}
+                    onClick={() => setActiveTab(tab.value)}
+                    className={`
+                      group relative flex-shrink-0 flex flex-col items-center gap-2 px-4 py-3 rounded-xl
+                      transition-all duration-300 ease-out
+                      ${isActive 
+                        ? `bg-gradient-to-br ${tab.color} text-white shadow-lg shadow-primary/30 scale-105` 
+                        : 'bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground'
+                      }
+                      min-w-[100px] md:min-w-[120px]
+                    `}
+                  >
+                    {/* Active Indicator Glow */}
+                    {isActive && (
+                      <div className={`absolute inset-0 bg-gradient-to-br ${tab.color} opacity-20 blur-md -z-10 rounded-xl`} />
+                    )}
+                    
+                    {/* Icon Container */}
+                    <div className={`
+                      relative w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center
+                      transition-all duration-300
+                      ${isActive 
+                        ? 'bg-white/20 shadow-lg' 
+                        : 'bg-white/5 group-hover:bg-white/10'
+                      }
+                    `}>
+                      <Icon 
+                        size={isActive ? 22 : 20} 
+                        className={`
+                          transition-all duration-300
+                          ${isActive ? 'text-white scale-110' : 'text-muted-foreground group-hover:text-foreground'}
+                        `}
+                      />
+                      {/* Active Pulse Effect */}
+                      {isActive && (
+                        <div className="absolute inset-0 rounded-xl bg-white/30 animate-ping opacity-75" />
+                      )}
+                    </div>
+                    
+                    {/* Label */}
+                    <span className={`
+                      text-[10px] md:text-xs font-semibold text-center leading-tight
+                      transition-all duration-300
+                      ${isActive ? 'text-white' : 'text-muted-foreground group-hover:text-foreground'}
+                      line-clamp-2 max-w-[100px] md:max-w-[120px]
+                    `}>
+                      {tab.label}
+                    </span>
+                    
+                    {/* Active Bottom Border */}
+                    {isActive && (
+                      <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 w-12 h-1 bg-gradient-to-r ${tab.color} rounded-full`} />
+                    )}
+                    
+                    {/* Hover Effect */}
+                    {!isActive && (
+                      <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-white/0 to-white/0 group-hover:from-white/5 group-hover:to-transparent transition-all duration-300" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            
+            {/* Scroll Indicator Shadows */}
+            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-card/80 to-transparent pointer-events-none z-10" />
+            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-card/80 to-transparent pointer-events-none z-10" />
+          </div>
         </div>
 
         {/* Personal Info Tab */}
@@ -2239,6 +2276,72 @@ export default function EmployeeDetailPage() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* Timesheet Tab */}
+        <TabsContent value="timesheet" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock size={20} /> Submitted Timesheet Reports
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {timesheetEntries.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+                  <p>No submitted timesheet reports found</p>
+                  <p className="text-xs mt-2">Only submitted reports are visible to admin</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {timesheetEntries.map((entry) => (
+                    <div key={entry.id} className="p-4 bg-white/5 rounded-lg border border-white/10">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Calendar size={16} className="text-muted-foreground" />
+                            <span className="font-semibold">
+                              {new Date(entry.date).toLocaleDateString('en-US', {
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                              })}
+                            </span>
+                            <Badge variant={entry.report_type === 'weekly' ? 'secondary' : 'default'}>
+                              {entry.report_type || 'daily'}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Clock size={14} />
+                              {entry.hours_worked}h
+                            </span>
+                            {entry.project_name && (
+                              <span>Project: {entry.project_name}</span>
+                            )}
+                            {entry.task_type && (
+                              <Badge variant="outline" className="text-xs">{entry.task_type}</Badge>
+                            )}
+                          </div>
+                          {entry.description && (
+                            <p className="text-sm mt-2 text-muted-foreground">{entry.description}</p>
+                          )}
+                          {entry.submitted_at && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Submitted: {new Date(entry.submitted_at).toLocaleString('en-US')}
+                            </p>
+                          )}
+                        </div>
+                        <CheckCircle size={20} className="text-green-400 flex-shrink-0" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Requests Tab */}

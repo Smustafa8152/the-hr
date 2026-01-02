@@ -33,6 +33,7 @@ import DocumentRequestsPage from "./pages/DocumentRequestsPage";
 import EmployeeRequestsPage from "./pages/EmployeeRequestsPage";
 import ImmigrationManagementPage from "./pages/ImmigrationManagementPage";
 import EmployeeAttendancePage from "./pages/EmployeeAttendancePage";
+import EmployeeTimesheetPage from "./pages/EmployeeTimesheetPage";
 import LoginPage from "./pages/LoginPage";
 import './utils/i18n';
 
@@ -67,6 +68,7 @@ function Router() {
             <Route path="/self-service/leaves" component={EmployeeLeavesPage} />
             <Route path="/self-service/profile" component={EmployeeProfilePage} />
             <Route path="/self-service/attendance" component={EmployeeAttendancePage} />
+            <Route path="/self-service/timesheet" component={EmployeeTimesheetPage} />
             <Route path="/timesheets" component={TimesheetsPage} />
             <Route path="/documents" component={DocumentsPage} />
             <Route path="/document-requests" component={DocumentRequestsPage} />

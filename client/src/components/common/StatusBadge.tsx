@@ -1,13 +1,13 @@
 import { cn } from './UIComponents';
 
-export type RequestStatus = 'Pending' | 'In Review' | 'Approved' | 'Rejected' | 'Cancelled';
+export type RequestStatus = 'Pending' | 'In Review' | 'Approved' | 'Rejected' | 'Cancelled' | 'Completed' | 'Draft';
 
 interface StatusBadgeProps {
-  status: RequestStatus;
+  status: RequestStatus | string; // Allow string for flexibility
   className?: string;
 }
 
-const statusConfig: Record<RequestStatus, { bg: string; text: string; border: string }> = {
+const statusConfig: Record<string, { bg: string; text: string; border: string }> = {
   'Pending': {
     bg: 'bg-yellow-500/10',
     text: 'text-yellow-500',
@@ -32,11 +32,25 @@ const statusConfig: Record<RequestStatus, { bg: string; text: string; border: st
     bg: 'bg-gray-500/10',
     text: 'text-gray-500',
     border: 'border-gray-500/20'
+  },
+  'Completed': {
+    bg: 'bg-green-500/10',
+    text: 'text-green-500',
+    border: 'border-green-500/20'
+  },
+  'Draft': {
+    bg: 'bg-gray-500/10',
+    text: 'text-gray-500',
+    border: 'border-gray-500/20'
   }
 };
 
 export const StatusBadge = ({ status, className }: StatusBadgeProps) => {
-  const config = statusConfig[status];
+  const config = statusConfig[status] || {
+    bg: 'bg-gray-500/10',
+    text: 'text-gray-500',
+    border: 'border-gray-500/20'
+  };
   
   return (
     <span className={cn(

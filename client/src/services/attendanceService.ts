@@ -918,8 +918,8 @@ export const attendanceService = {
   },
 
   /**
-   * Create a manual punch (still uses attendance_logs table for manual entries)
-   * Now supports geo-location and face verification
+   * Create a manual punch (posts to attendances table)
+   * Now supports geo-location and WebAuthn verification
    */
   async createPunch(log: Partial<AttendanceLog> & {
     latitude?: number;
@@ -932,9 +932,65 @@ export const attendanceService = {
     verification_method?: string;
     device_info?: string;
     ip_address?: string;
+    webauthn_verified?: boolean;
+    webauthn_credential_id?: string;
+    webauthn_device_name?: string;
   }) {
     try {
-      const response = await adminApi.post('/attendance_logs', log);
+      // Get employee to map UUID to integer ID
+      const employee = await employeeService.getById(log.employee_id!);
+      if (!employee) {
+        throw new Error('Employee not found');
+      }
+
+      // Map employee UUID to integer ID (for attendances table)
+      let integerEmployeeId: number | null = null;
+      const externalId = (employee as any).external_id;
+      if (externalId && !isNaN(Number(externalId))) {
+        integerEmployeeId = Number(externalId);
+      } else {
+        // Try to extract from employee_id text
+        const employeeIdText = employee.employee_id || employee.employeeId || '';
+        const match = employeeIdText.match(/\d+/);
+        if (match) {
+          integerEmployeeId = parseInt(match[0], 10);
+        } else if (!isNaN(Number(employeeIdText))) {
+          integerEmployeeId = Number(employeeIdText);
+        }
+      }
+
+      if (!integerEmployeeId) {
+        throw new Error('Could not map employee ID to integer format');
+      }
+
+      // Determine timestamp and status flags based on check_in or check_out
+      const isCheckIn = !!log.check_in;
+      const timestamp = isCheckIn ? log.check_in! : log.check_out!;
+      const date = new Date(timestamp);
+      const hour = date.getHours();
+      const isMorning = hour < 12;
+
+      // Transform to attendances table format
+      const attendanceData: any = {
+        employee_id: integerEmployeeId,
+        timestamp: timestamp,
+        status1: isCheckIn || (isMorning && !log.check_out) ? true : null, // Check-in flag
+        status2: !isCheckIn || (!isMorning && log.check_out) ? true : null, // Check-out flag
+        status3: null,
+        status4: null,
+        status5: null,
+        sn: `WEB-${Date.now()}`, // Generate a serial number
+        table: 'web_portal', // Indicate this came from web portal
+        stamp: new Date().toISOString(), // Current timestamp as stamp
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      // Add optional fields if they exist (these might need to be stored elsewhere or in a separate table)
+      // Note: attendances table might not have these fields, so we'll only include basic fields
+      // If you need to store geo/webauthn data, consider storing in attendance_logs or a separate table
+
+      const response = await adminApi.post('/attendances', attendanceData);
       if (response.data && response.data.length > 0) {
         return response.data[0];
       }
