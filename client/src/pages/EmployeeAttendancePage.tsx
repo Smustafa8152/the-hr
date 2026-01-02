@@ -251,11 +251,10 @@ export default function EmployeeAttendancePage() {
       // Authenticate with WebAuthn
       const assertion = await webauthnService.authenticate(user.employee_id);
 
-      // Verify with server
+      // Verify authentication
       const result = await webauthnService.verifyAuthentication(
         user.employee_id,
-        assertion,
-        '' // Challenge will be handled by server
+        assertion
       );
 
       if (result.verified) {
