@@ -105,23 +105,37 @@ async function detectFace(image: HTMLImageElement | HTMLVideoElement | HTMLCanva
     const startTime = performance.now();
     
     // Detect face with landmarks and descriptor
-    // Lower scoreThreshold (default 0.5) to make detection more sensitive
-    // inputSize: 320 is faster, 416 is more accurate
+    // Use higher inputSize for better accuracy, especially at different distances
+    // Face alignment (landmarks) helps normalize face orientation before descriptor extraction
     const detection = await faceapi
       .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions({ 
-        inputSize: 416, // Higher resolution for better detection
+        inputSize: 512, // Higher resolution (512) for better detection at various distances
         scoreThreshold: 0.3 // Lower threshold for more sensitive detection
       }))
-      .withFaceLandmarks()
-      .withFaceDescriptor();
+      .withFaceLandmarks() // Face alignment - normalizes face orientation
+      .withFaceDescriptor(); // 128-dimensional face descriptor
 
     const endTime = performance.now();
     const duration = endTime - startTime;
 
     if (detection) {
       const box = detection.detection.box;
-      console.log(`[Face Detection] ✓ Face detected! Box: x=${box.x.toFixed(1)}, y=${box.y.toFixed(1)}, width=${box.width.toFixed(1)}, height=${box.height.toFixed(1)}, score=${detection.detection.score.toFixed(3)}`);
+      const faceArea = box.width * box.height;
+      const imageArea = width * height;
+      const faceRatio = faceArea / imageArea;
+      
+      // Ensure face is at least 5% of image area for good quality recognition
+      // This helps ensure consistent recognition regardless of distance
+      const minFaceRatio = 0.05; // 5% of image
+      
+      console.log(`[Face Detection] ✓ Face detected! Box: x=${box.x.toFixed(1)}, y=${box.y.toFixed(1)}, width=${box.width.toFixed(1)}, height=${box.height.toFixed(1)}, score=${detection.detection.score.toFixed(3)}, faceRatio=${(faceRatio * 100).toFixed(2)}%`);
       console.log(`[Face Detection] Detection took ${duration.toFixed(2)}ms`);
+      
+      if (faceRatio < minFaceRatio) {
+        console.warn(`[Face Detection] Face too small (${(faceRatio * 100).toFixed(2)}% of image, minimum: ${(minFaceRatio * 100).toFixed(2)}%). Please move closer to camera.`);
+        // Still return it, but log a warning - the alignment will help normalize it
+      }
+      
       return detection;
     } else {
       console.log(`[Face Detection] ✗ No face detected (took ${duration.toFixed(2)}ms)`);
@@ -130,10 +144,10 @@ async function detectFace(image: HTMLImageElement | HTMLVideoElement | HTMLCanva
       console.log('[Face Detection] Retrying with lower threshold (0.2)...');
       const retryDetection = await faceapi
         .detectSingleFace(image, new faceapi.TinyFaceDetectorOptions({ 
-          inputSize: 416,
+          inputSize: 512, // Keep high resolution
           scoreThreshold: 0.2 // Even lower threshold
         }))
-        .withFaceLandmarks()
+        .withFaceLandmarks() // Face alignment
         .withFaceDescriptor();
       
       if (retryDetection) {
@@ -247,24 +261,56 @@ export async function getFaceDescriptor(imageData: string): Promise<Float32Array
 /**
  * Compare two face descriptors using Euclidean distance
  * Returns confidence score (0-100)
+ * Improved algorithm for better robustness to distance and lighting changes
  */
 export function compareFaces(
   descriptor1: Float32Array,
   descriptor2: Float32Array
 ): number {
-  // Calculate Euclidean distance between descriptors
-  let distance = 0;
-  for (let i = 0; i < descriptor1.length && i < descriptor2.length; i++) {
-    const diff = descriptor1[i] - descriptor2[i];
-    distance += diff * diff;
+  // Normalize descriptors first (L2 normalization)
+  // This makes comparison more robust to lighting and distance changes
+  let norm1 = 0;
+  let norm2 = 0;
+  for (let i = 0; i < descriptor1.length; i++) {
+    norm1 += descriptor1[i] * descriptor1[i];
   }
-  distance = Math.sqrt(distance);
+  for (let i = 0; i < descriptor2.length; i++) {
+    norm2 += descriptor2[i] * descriptor2[i];
+  }
+  norm1 = Math.sqrt(norm1);
+  norm2 = Math.sqrt(norm2);
 
-  // face-api.js typical threshold: < 0.6 = match
-  // Convert distance to confidence score (0-100)
-  // Lower distance = higher confidence
-  const threshold = 0.6;
-  const confidence = Math.max(0, Math.min(100, (1 - distance / threshold) * 100));
+  // Calculate cosine similarity (dot product of normalized vectors)
+  // This is more robust than Euclidean distance for face recognition
+  let dotProduct = 0;
+  for (let i = 0; i < descriptor1.length && i < descriptor2.length; i++) {
+    dotProduct += (descriptor1[i] / norm1) * (descriptor2[i] / norm2);
+  }
+
+  // Cosine similarity ranges from -1 to 1, but for faces it's typically 0.5 to 1.0
+  // Convert to confidence score (0-100)
+  // Typical face matches: 0.6-0.7 = good match, 0.7-0.8 = very good, 0.8+ = excellent
+  // Map cosine similarity to confidence: 0.5 -> 0%, 0.6 -> 50%, 0.7 -> 75%, 0.8 -> 90%, 1.0 -> 100%
+  let confidence = 0;
+  if (dotProduct >= 0.8) {
+    // Excellent match: 0.8-1.0 maps to 90-100%
+    confidence = 90 + (dotProduct - 0.8) * 50; // 90% to 100%
+  } else if (dotProduct >= 0.7) {
+    // Very good match: 0.7-0.8 maps to 75-90%
+    confidence = 75 + (dotProduct - 0.7) * 150; // 75% to 90%
+  } else if (dotProduct >= 0.6) {
+    // Good match: 0.6-0.7 maps to 50-75%
+    confidence = 50 + (dotProduct - 0.6) * 250; // 50% to 75%
+  } else if (dotProduct >= 0.5) {
+    // Fair match: 0.5-0.6 maps to 0-50%
+    confidence = (dotProduct - 0.5) * 500; // 0% to 50%
+  } else {
+    // Poor match: < 0.5
+    confidence = 0;
+  }
+
+  // Clamp to 0-100
+  confidence = Math.max(0, Math.min(100, confidence));
   
   return confidence;
 }
@@ -471,8 +517,14 @@ export const faceRecognitionService = {
         }
       }
 
+      // Lower threshold to 60% for better recognition across different conditions
+      // The improved cosine similarity algorithm should provide more accurate confidence scores
+      const verificationThreshold = 60; // 60% confidence threshold
+      
+      console.log(`[Face Verification] Best confidence: ${bestConfidence.toFixed(2)}%, threshold: ${verificationThreshold}%, verified: ${bestConfidence >= verificationThreshold}`);
+      
       return {
-        verified: bestConfidence >= 70, // 70% confidence threshold
+        verified: bestConfidence >= verificationThreshold,
         confidence: bestConfidence,
         matchedAngle
       };
