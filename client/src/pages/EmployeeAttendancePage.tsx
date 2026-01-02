@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '../comp
 import Modal from '../components/common/Modal';
 import { attendanceLocationService, AttendanceLocationSettings } from '../services/attendanceLocationService';
 import { employeeAttendanceLocationService, EmployeeAttendanceLocation } from '../services/employeeAttendanceLocationService';
-import { faceRecognitionService, captureFaceFromVideo } from '../services/faceRecognitionService';
-import MultiAngleFaceCapture from '../components/face/MultiAngleFaceCapture';
+import { webauthnService, WebAuthnCredential } from '../services/webauthnService';
+import { employeeService } from '../services/employeeService';
 import { attendanceService, AttendanceLog } from '../services/attendanceService';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
@@ -20,44 +20,28 @@ export default function EmployeeAttendancePage() {
   const [locationSettings, setLocationSettings] = useState<AttendanceLocationSettings | null>(null);
   const [employeeLocation, setEmployeeLocation] = useState<EmployeeAttendanceLocation | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
-  const [isLocationSettingsModalOpen, setIsLocationSettingsModalOpen] = useState(false);
-  const [locationForm, setLocationForm] = useState({
-    location_name: '',
-    google_maps_link: '',
-    radius_meters: 100,
-    is_active: true,
-    use_company_default: true
-  });
   const [locationVerified, setLocationVerified] = useState<boolean>(false);
   const [distance, setDistance] = useState<number | null>(null);
-  const [faceVerified, setFaceVerified] = useState<boolean>(false);
-  const [hasFaceImage, setHasFaceImage] = useState<boolean>(false);
-  const [isCapturing, setIsCapturing] = useState<boolean>(false);
+  const [webauthnVerified, setWebauthnVerified] = useState<boolean>(false);
+  const [hasWebAuthnCredential, setHasWebAuthnCredential] = useState<boolean>(false);
+  const [isRegistering, setIsRegistering] = useState<boolean>(false);
+  const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [punchType, setPunchType] = useState<'check_in' | 'check_out' | null>(null);
-  const [isFaceCaptureModalOpen, setIsFaceCaptureModalOpen] = useState<boolean>(false);
   const [isAttendanceLogModalOpen, setIsAttendanceLogModalOpen] = useState<boolean>(false);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState<boolean>(false);
-  const [cameraReady, setCameraReady] = useState<boolean>(false);
-  
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const [employeeData, setEmployeeData] = useState<{ name: string; email: string } | null>(null);
 
   useEffect(() => {
     if (user?.company_id) {
       loadLocationSettings();
-      checkFaceImage();
+      checkWebAuthnCredential();
     }
     if (user?.employee_id) {
       loadEmployeeLocation();
+      loadEmployeeData();
     }
-    return () => {
-      // Cleanup video stream
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
-    };
   }, [user?.company_id, user?.employee_id]);
 
   // Note: Camera is now managed by MultiAngleFaceCapture component
@@ -78,27 +62,33 @@ export default function EmployeeAttendancePage() {
     try {
       const location = await employeeAttendanceLocationService.getByEmployee(user.employee_id);
       setEmployeeLocation(location);
-      if (location) {
-        setLocationForm({
-          location_name: location.location_name,
-          google_maps_link: location.google_maps_link || '',
-          radius_meters: location.radius_meters,
-          is_active: location.is_active,
-          use_company_default: location.use_company_default
-        });
-      }
     } catch (error) {
       console.error('Error loading employee location:', error);
     }
   };
 
-  const checkFaceImage = async () => {
+  const loadEmployeeData = async () => {
     if (!user?.employee_id) return;
     try {
-      const faceImage = await faceRecognitionService.getPrimaryFaceImage(user.employee_id);
-      setHasFaceImage(!!faceImage);
+      const employee = await employeeService.getById(user.employee_id);
+      if (employee) {
+        setEmployeeData({
+          name: `${employee.firstName || ''} ${employee.lastName || ''}`.trim() || employee.employeeId,
+          email: employee.email || `${employee.employeeId}@company.com`
+        });
+      }
     } catch (error) {
-      console.error('Error checking face image:', error);
+      console.error('Error loading employee data:', error);
+    }
+  };
+
+  const checkWebAuthnCredential = async () => {
+    if (!user?.employee_id) return;
+    try {
+      const credentials = await webauthnService.getCredentials(user.employee_id);
+      setHasWebAuthnCredential(credentials.length > 0);
+    } catch (error) {
+      console.error('Error checking WebAuthn credentials:', error);
     }
   };
 
@@ -204,99 +194,82 @@ export default function EmployeeAttendancePage() {
     }
   };
 
-  const handleSaveEmployeeLocation = async () => {
-    if (!user?.employee_id) return;
-    try {
-      // Parse Google Maps link to extract coordinates
-      let latitude: number | null = null;
-      let longitude: number | null = null;
 
-      if (locationForm.google_maps_link && !locationForm.use_company_default) {
-        const coords = await attendanceLocationService.parseGoogleMapsLink(locationForm.google_maps_link);
-        if (coords) {
-          latitude = coords.latitude;
-          longitude = coords.longitude;
-        } else {
-          toast.error('Could not parse Google Maps link. Please ensure it contains coordinates.');
-          return;
-        }
-      }
-
-      await employeeAttendanceLocationService.upsert({
-        employee_id: user.employee_id,
-        location_name: locationForm.location_name,
-        google_maps_link: locationForm.use_company_default ? null : (locationForm.google_maps_link || null),
-        latitude,
-        longitude,
-        radius_meters: locationForm.radius_meters,
-        is_active: locationForm.is_active,
-        use_company_default: locationForm.use_company_default
-      });
-
-      toast.success('Attendance location saved successfully!');
-      setIsLocationSettingsModalOpen(false);
-      loadEmployeeLocation();
-    } catch (error: any) {
-      console.error('Failed to save attendance location', error);
-      toast.error(error.message || 'Failed to save attendance location');
+  const handleWebAuthnRegister = async () => {
+    if (!user?.employee_id || !employeeData) {
+      toast.error('Employee data not available');
+      return;
     }
-  };
 
-  const startCamera = async () => {
+    if (!webauthnService.isSupported()) {
+      toast.error('WebAuthn is not supported in this browser. Please use a modern browser with Face ID, Touch ID, or Windows Hello.');
+      return;
+    }
+
     try {
-      setCameraReady(false);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: 'user',
-          width: { ideal: 640 },
-          height: { ideal: 480 }
-        }
-      });
+      setIsRegistering(true);
       
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        streamRef.current = stream;
-        
-        // Wait for video to be ready
-        videoRef.current.onloadedmetadata = () => {
-          if (videoRef.current) {
-            videoRef.current.play().then(() => {
-              setCameraReady(true);
-            }).catch((error) => {
-              console.error('Error playing video:', error);
-              setCameraReady(false);
-            });
-          }
-        };
+      // Register WebAuthn credential
+      const { credential, deviceName } = await webauthnService.register(
+        user.employee_id,
+        employeeData.name,
+        employeeData.email,
+        'HR System' // Company name - you might want to fetch this from settings
+      );
+
+      // Save credential to database
+      await webauthnService.saveCredential(
+        user.employee_id,
+        credential,
+        deviceName,
+        '' // Challenge will be handled by server
+      );
+
+      toast.success('Device registered successfully! You can now use Face ID/Touch ID for attendance.');
+      await checkWebAuthnCredential();
+    } catch (error: any) {
+      console.error('WebAuthn registration error:', error);
+      toast.error(error.message || 'Failed to register device');
+    } finally {
+      setIsRegistering(false);
+    }
+  };
+
+  const handleWebAuthnAuthenticate = async () => {
+    if (!user?.employee_id) {
+      toast.error('Employee ID not found');
+      return;
+    }
+
+    if (!webauthnService.isSupported()) {
+      toast.error('WebAuthn is not supported in this browser.');
+      return;
+    }
+
+    try {
+      setIsAuthenticating(true);
+      
+      // Authenticate with WebAuthn
+      const assertion = await webauthnService.authenticate(user.employee_id);
+
+      // Verify with server
+      const result = await webauthnService.verifyAuthentication(
+        user.employee_id,
+        assertion,
+        '' // Challenge will be handled by server
+      );
+
+      if (result.verified) {
+        setWebauthnVerified(true);
+        toast.success('WebAuthn verification successful!');
+      } else {
+        toast.error('WebAuthn verification failed');
       }
     } catch (error: any) {
-      console.error('Error accessing camera:', error);
-      toast.error('Failed to access camera. Please allow camera permissions.');
-      setIsFaceCaptureModalOpen(false);
-      setCameraReady(false);
-    }
-  };
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setCameraReady(false);
-  };
-
-  const handleFaceCaptureComplete = async () => {
-    setIsFaceCaptureModalOpen(false);
-    await checkFaceImage();
-    if (hasFaceImage) {
-      // If verifying, set face verified
-      setFaceVerified(true);
-    } else {
-      // If first time capture, set hasFaceImage
-      setHasFaceImage(true);
+      console.error('WebAuthn authentication error:', error);
+      toast.error(error.message || 'WebAuthn authentication failed');
+    } finally {
+      setIsAuthenticating(false);
     }
   };
 
@@ -338,10 +311,14 @@ export default function EmployeeAttendancePage() {
         }
       }
 
-      // Verify face if required (use company settings for face recognition)
-      if (locationSettings?.require_face_verification && locationSettings?.face_recognition_enabled) {
-        if (!faceVerified && hasFaceImage) {
-          toast.error('Please verify your face first');
+      // Verify WebAuthn if required
+      if (locationSettings?.require_face_verification) {
+        if (!webauthnVerified && hasWebAuthnCredential) {
+          toast.error('Please verify with WebAuthn first (Face ID/Touch ID)');
+          return;
+        }
+        if (!hasWebAuthnCredential) {
+          toast.error('Please register your device first');
           return;
         }
       }
@@ -354,10 +331,15 @@ export default function EmployeeAttendancePage() {
       const date = now.toISOString().split('T')[0];
       const time = now.toISOString();
 
-      // Capture face image if needed for submission
-      let faceImageData: string | null = null;
-      if (locationSettings?.require_face_verification && videoRef.current) {
-        faceImageData = await captureFaceFromVideo(videoRef.current);
+      // Get WebAuthn credential info if verified
+      let webauthnCredentialId: string | null = null;
+      let webauthnDeviceName: string | null = null;
+      if (webauthnVerified) {
+        const credentials = await webauthnService.getCredentials(user.employee_id);
+        if (credentials.length > 0) {
+          webauthnCredentialId = credentials[0].credential_id;
+          webauthnDeviceName = credentials[0].device_name || null;
+        }
       }
 
       // Create attendance record
@@ -367,10 +349,10 @@ export default function EmployeeAttendancePage() {
         [type === 'check_in' ? 'check_in' : 'check_out']: time,
         status: 'Present',
         location_verified: locationVerified,
-        face_verified: faceVerified || !hasFaceImage,
-        verification_method: locationVerified && faceVerified ? 'geo_face' : 
+        webauthn_verified: webauthnVerified,
+        verification_method: locationVerified && webauthnVerified ? 'geo_webauthn' : 
                              locationVerified ? 'geo_only' : 
-                             faceVerified ? 'face_only' : 'manual',
+                             webauthnVerified ? 'webauthn_only' : 'manual',
         device_info: navigator.userAgent
       };
 
@@ -382,16 +364,9 @@ export default function EmployeeAttendancePage() {
         }
       }
 
-      if (faceImageData) {
-        attendanceData.face_image_url = faceImageData;
-        if (faceVerified) {
-          // Get confidence from verification
-          const verification = await faceRecognitionService.verifyFace(
-            user.employee_id,
-            faceImageData
-          );
-          attendanceData.face_match_confidence = verification.confidence;
-        }
+      if (webauthnCredentialId) {
+        attendanceData.webauthn_credential_id = webauthnCredentialId;
+        attendanceData.webauthn_device_name = webauthnDeviceName;
       }
 
       await attendanceService.createPunch(attendanceData);
@@ -400,10 +375,9 @@ export default function EmployeeAttendancePage() {
       
       // Reset states
       setLocationVerified(false);
-      setFaceVerified(false);
+      setWebauthnVerified(false);
       setUserLocation(null);
       setDistance(null);
-      stopCamera();
     } catch (error: any) {
       console.error('Error submitting attendance:', error);
       toast.error(error.message || 'Failed to submit attendance');
@@ -440,30 +414,22 @@ export default function EmployeeAttendancePage() {
         <CardContent>
           <div className="space-y-4">
             <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <MapPin size={18} className="text-blue-400" />
-                  <span className="font-semibold">
-                    {activeLocation?.location_name || locationSettings?.location_name || 'Location'}
-                    {employeeLocation && !employeeLocation.use_company_default && (
-                      <Badge variant="outline" className="ml-2 text-xs">Custom</Badge>
-                    )}
-                  </span>
-                </div>
-                <Button
-                  onClick={() => setIsLocationSettingsModalOpen(true)}
-                  variant="ghost"
-                  size="sm"
-                >
-                  <MapPin size={16} className="mr-1" />
-                  {employeeLocation ? 'Edit' : 'Set'} Location
-                </Button>
+              <div className="flex items-center gap-2 mb-2">
+                <MapPin size={18} className="text-blue-400" />
+                <span className="font-semibold">
+                  {activeLocation?.location_name || locationSettings?.location_name || 'Location'}
+                  {employeeLocation && !employeeLocation.use_company_default && (
+                    <Badge variant="outline" className="ml-2 text-xs">Admin Set</Badge>
+                  )}
+                </span>
               </div>
               <p className="text-sm text-muted-foreground">
                 Allowed radius: {activeLocation?.radius_meters || locationSettings?.radius_meters || 100}m
-                {employeeLocation?.use_company_default && (
+                {employeeLocation?.use_company_default ? (
                   <span className="ml-2">(Using company default)</span>
-                )}
+                ) : employeeLocation ? (
+                  <span className="ml-2">(Set by administrator)</span>
+                ) : null}
               </p>
             </div>
 
@@ -504,16 +470,16 @@ export default function EmployeeAttendancePage() {
               </Button>
             </div>
 
-            {/* Face Recognition */}
-            {locationSettings.face_recognition_enabled && (
+            {/* WebAuthn Verification */}
+            {locationSettings?.require_face_verification && (
               <div className="space-y-3 pt-4 border-t border-white/10">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Camera size={20} className="text-purple-400" />
-                    <span className="font-semibold">Face Verification</span>
+                    <CheckCircle size={20} className="text-purple-400" />
+                    <span className="font-semibold">Biometric Verification</span>
                   </div>
-                  {hasFaceImage ? (
-                    faceVerified ? (
+                  {hasWebAuthnCredential ? (
+                    webauthnVerified ? (
                       <Badge variant="success" className="flex items-center gap-1">
                         <CheckCircle size={14} />
                         Verified
@@ -526,23 +492,61 @@ export default function EmployeeAttendancePage() {
                   )}
                 </div>
 
-                {!hasFaceImage && (
+                {!hasWebAuthnCredential && (
                   <div className="p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
-                    <p className="text-sm text-yellow-400">
-                      This is your first time. Please capture your face image for future verification.
+                    <p className="text-sm text-yellow-400 mb-2">
+                      Register your device to use Face ID, Touch ID, or Windows Hello for attendance.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Your biometric data stays on your device and is never sent to the server.
                     </p>
                   </div>
                 )}
 
-                <Button
-                  onClick={() => setIsFaceCaptureModalOpen(true)}
-                  variant="outline"
-                  className="w-full"
-                  disabled={isSubmitting}
-                >
-                  <Camera size={18} className="mr-2" />
-                  {hasFaceImage ? 'Verify Face' : 'Capture Face Image'}
-                </Button>
+                {!hasWebAuthnCredential ? (
+                  <Button
+                    onClick={handleWebAuthnRegister}
+                    variant="outline"
+                    className="w-full"
+                    disabled={isSubmitting || isRegistering || !webauthnService.isSupported()}
+                  >
+                    {isRegistering ? (
+                      <>
+                        <Loader2 size={18} className="mr-2 animate-spin" />
+                        Registering Device...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={18} className="mr-2" />
+                        Register Device (Face ID/Touch ID)
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleWebAuthnAuthenticate}
+                    variant="outline"
+                    className="w-full"
+                    disabled={isSubmitting || isAuthenticating || webauthnVerified}
+                  >
+                    {isAuthenticating ? (
+                      <>
+                        <Loader2 size={18} className="mr-2 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : webauthnVerified ? (
+                      <>
+                        <CheckCircle size={18} className="mr-2" />
+                        Verified
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle size={18} className="mr-2" />
+                        Verify with Face ID/Touch ID
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             )}
 
@@ -550,7 +554,7 @@ export default function EmployeeAttendancePage() {
             <div className="pt-4 border-t border-white/10 space-y-3">
               <Button
                 onClick={() => submitAttendance('check_in')}
-                disabled={!locationVerified || (locationSettings.require_face_verification && !faceVerified && hasFaceImage) || isSubmitting}
+                disabled={!locationVerified || (locationSettings?.require_face_verification && !webauthnVerified && hasWebAuthnCredential) || isSubmitting}
                 className="w-full"
                 size="lg"
               >
@@ -569,7 +573,7 @@ export default function EmployeeAttendancePage() {
 
               <Button
                 onClick={() => submitAttendance('check_out')}
-                disabled={!locationVerified || (locationSettings.require_face_verification && !faceVerified && hasFaceImage) || isSubmitting}
+                disabled={!locationVerified || (locationSettings?.require_face_verification && !webauthnVerified && hasWebAuthnCredential) || isSubmitting}
                 variant="outline"
                 className="w-full"
                 size="lg"
@@ -599,19 +603,6 @@ export default function EmployeeAttendancePage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Multi-Angle Face Capture Modal */}
-      {isFaceCaptureModalOpen && user?.employee_id && (
-        <MultiAngleFaceCapture
-          employeeId={user.employee_id}
-          onComplete={handleFaceCaptureComplete}
-          onCancel={() => {
-            setIsFaceCaptureModalOpen(false);
-            stopCamera();
-          }}
-          isVerification={hasFaceImage}
-        />
-      )}
 
       {/* Attendance Logs Modal */}
       <Modal
@@ -701,113 +692,6 @@ export default function EmployeeAttendancePage() {
         </div>
       </Modal>
 
-      {/* Employee Location Settings Modal */}
-      <Modal
-        isOpen={isLocationSettingsModalOpen}
-        onClose={() => {
-          setIsLocationSettingsModalOpen(false);
-          loadEmployeeLocation();
-        }}
-        title="Set Your Attendance Location"
-        size="lg"
-      >
-        <form onSubmit={(e) => { e.preventDefault(); handleSaveEmployeeLocation(); }} className="space-y-4">
-          <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-            <p className="text-sm text-blue-400">
-              Set a dedicated location for your attendance. If not set, the company default location will be used.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Use Company Default Location</Label>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={locationForm.use_company_default}
-                onChange={(e) => setLocationForm({ ...locationForm, use_company_default: e.target.checked })}
-                className="w-5 h-5 rounded border-white/20"
-              />
-              <span className="text-sm text-muted-foreground">
-                Use the company's default attendance location
-              </span>
-            </div>
-          </div>
-
-          {!locationForm.use_company_default && (
-            <>
-              <div className="space-y-2">
-                <Label>Location Name *</Label>
-                <Input
-                  required={!locationForm.use_company_default}
-                  value={locationForm.location_name}
-                  onChange={(e) => setLocationForm({ ...locationForm, location_name: e.target.value })}
-                  placeholder="My Work Location"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Google Maps Link *</Label>
-                <Input
-                  required={!locationForm.use_company_default}
-                  value={locationForm.google_maps_link}
-                  onChange={(e) => setLocationForm({ ...locationForm, google_maps_link: e.target.value })}
-                  placeholder="https://maps.app.goo.gl/..."
-                />
-                <p className="text-xs text-muted-foreground">
-                  Paste a Google Maps link. The system will automatically extract coordinates.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Allowed Radius (meters) *</Label>
-                <Input
-                  type="number"
-                  required={!locationForm.use_company_default}
-                  min="10"
-                  max="1000"
-                  value={locationForm.radius_meters}
-                  onChange={(e) => setLocationForm({ ...locationForm, radius_meters: parseInt(e.target.value) || 100 })}
-                  placeholder="100"
-                />
-                <p className="text-xs text-muted-foreground">
-                  You must be within this radius to mark attendance (10-1000 meters)
-                </p>
-              </div>
-            </>
-          )}
-
-          <div className="space-y-2 pt-4 border-t border-white/10">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label>Active</Label>
-                <p className="text-xs text-muted-foreground">
-                  Enable or disable this location setting
-                </p>
-              </div>
-              <input
-                type="checkbox"
-                checked={locationForm.is_active}
-                onChange={(e) => setLocationForm({ ...locationForm, is_active: e.target.checked })}
-                className="w-5 h-5 rounded border-white/20"
-              />
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-white/10 flex justify-end gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setIsLocationSettingsModalOpen(false);
-                loadEmployeeLocation();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button type="submit">Save Location</Button>
-          </div>
-        </form>
-      </Modal>
     </div>
   );
 }
