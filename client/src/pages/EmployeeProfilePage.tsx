@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { User, FileText, Clock, DollarSign, Shield, MapPin, Phone, Mail, Calendar, Briefcase, Building2, GraduationCap, CreditCard, Globe, FileCheck, AlertCircle, Download } from 'lucide-react';
+import { User, FileText, DollarSign, Shield, MapPin, Phone, Mail, Calendar, Briefcase, Building2, GraduationCap, CreditCard, Globe, FileCheck, AlertCircle, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '../components/common/UIComponents';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../components/ui/accordion';
 import { employeeService, Employee } from '../services/employeeService';
@@ -15,7 +15,518 @@ import { leaveService, LeaveRequest } from '../services/leaveService';
 import { companySettingsService, EmployeeShift, EmployeeWorkingHours } from '../services/companySettingsService';
 import { useAuth } from '../contexts/AuthContext';
 import { StatusBadge } from '../components/common/StatusBadge';
-import { Calendar as CalendarIcon, FileText as FileTextIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, FileText as FileTextIcon, Users, Home, Fingerprint, CheckCircle2, XCircle, Clock, HelpCircle, ExternalLink, ChevronRight, ChevronLeft } from 'lucide-react';
+
+// Helper function to calculate days until expiry
+const calculateDaysUntilExpiry = (expiryDate: string | undefined): number | null => {
+  if (!expiryDate) return null;
+  const today = new Date();
+  const expiry = new Date(expiryDate);
+  const diffTime = expiry.getTime() - today.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
+// Helper function to get document status
+const getDocumentStatus = (daysUntilExpiry: number | null, status?: string): { label: string; color: string; priority: string } => {
+  if (daysUntilExpiry === null) {
+    return { label: status || 'Valid', color: 'text-green-400', priority: 'safe' };
+  }
+  if (daysUntilExpiry < 0) {
+    return { label: 'CRITICAL - Overdue!', color: 'text-red-400', priority: 'critical' };
+  }
+  if (daysUntilExpiry <= 14) {
+    return { label: 'URGENT - ' + Math.abs(daysUntilExpiry) + ' days left', color: 'text-red-400', priority: 'urgent' };
+  }
+  if (daysUntilExpiry <= 30) {
+    return { label: 'Attention - ' + daysUntilExpiry + ' days left', color: 'text-orange-400', priority: 'attention' };
+  }
+  return { label: 'Safe - ' + daysUntilExpiry + ' days left', color: 'text-green-400', priority: 'safe' };
+};
+
+// Employee Immigration View Component
+function EmployeeImmigrationView({ immigration, employee }: { immigration: EmployeeImmigration; employee: Employee }) {
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  
+  // Calculate document statuses
+  const documents = [
+    {
+      type: 'Civil ID',
+      number: immigration.civil_id_number || 'N/A',
+      expiryDate: immigration.civil_id_expiry_date,
+      status: immigration.civil_id_status,
+      icon: Users,
+      color: 'blue'
+    },
+    {
+      type: 'Passport',
+      number: immigration.passport_number || 'N/A',
+      expiryDate: immigration.passport_expiry_date,
+      status: immigration.passport_status,
+      icon: Globe,
+      color: 'green'
+    },
+    {
+      type: 'Work Permit',
+      number: immigration.work_permit_number || 'N/A',
+      expiryDate: immigration.work_permit_expiry_date,
+      status: immigration.work_permit_status,
+      icon: FileCheck,
+      color: 'purple'
+    },
+    {
+      type: 'Health Insurance',
+      number: immigration.health_insurance_number || immigration.health_insurance_provider || 'N/A',
+      expiryDate: immigration.health_insurance_expiry_date,
+      status: immigration.health_insurance_status,
+      icon: Shield,
+      color: 'cyan'
+    },
+    {
+      type: 'Residence Permit (Article 18)',
+      number: immigration.residence_permit_number || 'N/A',
+      expiryDate: immigration.residence_permit_expiry_date,
+      status: immigration.residence_permit_status,
+      icon: Home,
+      color: 'indigo'
+    },
+    {
+      type: 'Fingerprint Registration',
+      number: immigration.civil_id_number || 'N/A',
+      expiryDate: null,
+      status: 'Active',
+      icon: Fingerprint,
+      color: 'gray'
+    }
+  ].map(doc => ({
+    ...doc,
+    daysUntilExpiry: calculateDaysUntilExpiry(doc.expiryDate || undefined),
+    statusInfo: getDocumentStatus(calculateDaysUntilExpiry(doc.expiryDate || undefined), doc.status)
+  }));
+
+  // Calculate statistics
+  const totalDocuments = documents.length;
+  const requireAction = documents.filter(d => d.statusInfo.priority === 'urgent' || d.statusInfo.priority === 'critical' || d.statusInfo.priority === 'attention').length;
+  const validDocuments = documents.filter(d => d.statusInfo.priority === 'safe').length;
+  
+  // Find next deadline
+  const upcomingDeadlines = documents
+    .filter(d => d.expiryDate)
+    .map(d => ({ ...d, date: new Date(d.expiryDate!) }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const nextDeadline = upcomingDeadlines[0];
+
+  // Generate tasks based on document statuses
+  const tasks = documents
+    .filter(d => d.expiryDate && (d.daysUntilExpiry !== null && d.daysUntilExpiry <= 30))
+    .map(doc => ({
+      id: doc.type,
+      title: `${doc.type === 'Passport' ? 'Submit passport renewal application' : doc.type === 'Work Permit' ? 'Upload work permit supporting documents' : doc.type === 'Health Insurance' ? 'Complete health insurance renewal form' : doc.type === 'Residence Permit (Article 18)' ? 'Submit residence permit photos' : 'Update ' + doc.type.toLowerCase()}`,
+      dueDate: doc.expiryDate ? new Date(doc.expiryDate) : null,
+      priority: doc.statusInfo.priority === 'critical' || doc.statusInfo.priority === 'urgent' ? 'HIGH' : 'MEDIUM',
+      completed: false
+    }));
+
+  const completedTasks = 2; // Mock - would come from task tracking
+  const totalTasks = tasks.length + completedTasks;
+
+  // Generate notifications
+  const notifications = documents
+    .filter(d => d.expiryDate && (d.daysUntilExpiry !== null && d.daysUntilExpiry <= 30))
+    .map(doc => ({
+      type: doc.statusInfo.priority === 'critical' || doc.statusInfo.priority === 'urgent' ? 'error' : 'warning',
+      message: `${doc.type} ${doc.daysUntilExpiry && doc.daysUntilExpiry < 0 ? 'overdue' : doc.daysUntilExpiry && doc.daysUntilExpiry <= 14 ? 'expires in ' + doc.daysUntilExpiry + ' days' : 'needs attention'} - ${doc.statusInfo.priority === 'critical' || doc.statusInfo.priority === 'urgent' ? 'Immediate action required' : 'Start renewal process'}.`
+    }));
+
+  // Calendar helpers
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    const days = [];
+    // Add empty cells for days before the first day of the month
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null);
+    }
+    // Add days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(i);
+    }
+    return days;
+  };
+
+  const getEventsForDate = (day: number) => {
+    if (!day) return [];
+    return upcomingDeadlines.filter(d => {
+      const dDate = new Date(d.expiryDate!);
+      return dDate.getDate() === day && 
+             dDate.getMonth() === currentMonth.getMonth() && 
+             dDate.getFullYear() === currentMonth.getFullYear();
+    });
+  };
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  return (
+    <div className="space-y-3 md:space-y-4">
+      {/* Header Section */}
+      <div className="flex items-center justify-between mb-2 md:mb-3">
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+            <Globe size={18} className="md:w-5 md:h-5 text-purple-400" />
+          </div>
+          <div>
+            <h2 className="text-base md:text-2xl font-bold">Immigration & Documents</h2>
+            <p className="text-[10px] md:text-sm text-muted-foreground">Work permits, visas & renewals</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Summary Statistics Card */}
+      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+        <CardContent className="p-3 md:p-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+            {/* Documents Total */}
+            <div className="flex flex-col items-center justify-center p-2 md:p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg bg-blue-500/20 flex items-center justify-center mb-1.5 md:mb-2">
+                <span className="text-base md:text-lg font-bold text-blue-400">
+                  {(employee.first_name || 'U')[0]}{(employee.last_name || 'N')[0]}
+                </span>
+              </div>
+              <div className="text-lg md:text-2xl font-bold text-blue-400">{totalDocuments}</div>
+              <div className="text-[10px] md:text-xs text-muted-foreground text-center">Total</div>
+            </div>
+
+            {/* Require Action */}
+            <div className="flex flex-col items-center justify-center p-2 md:p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+              <div className="text-lg md:text-2xl font-bold text-orange-400 mb-0.5 md:mb-1">{requireAction}</div>
+              <div className="text-[10px] md:text-xs text-muted-foreground text-center">Require Action</div>
+            </div>
+
+            {/* Valid */}
+            <div className="flex flex-col items-center justify-center p-2 md:p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+              <div className="text-lg md:text-2xl font-bold text-green-400 mb-0.5 md:mb-1">{validDocuments}</div>
+              <div className="text-[10px] md:text-xs text-muted-foreground text-center">Valid</div>
+            </div>
+
+            {/* Next Deadline */}
+            <div className="flex flex-col items-center justify-center p-2 md:p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+              <div className="text-sm md:text-lg font-bold text-red-400 mb-0.5 md:mb-1 line-clamp-1">
+                {nextDeadline ? new Date(nextDeadline.expiryDate!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
+              </div>
+              <div className="text-[10px] md:text-xs text-muted-foreground text-center">Next Deadline</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Document Cards Section */}
+      <div>
+        <div className="flex items-center gap-2 mb-2 md:mb-3">
+          <FileCheck size={14} className="md:w-4 md:h-4 text-muted-foreground" />
+          <h3 className="text-sm md:text-base font-semibold">My Immigration Documents</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
+          {documents.map((doc, idx) => {
+            const Icon = doc.icon;
+            const isOverdue = doc.daysUntilExpiry !== null && doc.daysUntilExpiry < 0;
+            const isUrgent = doc.statusInfo.priority === 'urgent' || doc.statusInfo.priority === 'critical';
+            
+            return (
+              <Card key={idx} className={`p-2.5 md:p-4 border-2 transition-all hover:shadow-md ${
+                isUrgent ? 'border-red-500/50 bg-red-500/10' :
+                doc.statusInfo.priority === 'attention' ? 'border-orange-500/50 bg-orange-500/10' :
+                'border-green-500/50 bg-green-500/10'
+              }`}>
+                {/* Icon and URGENT Badge */}
+                <div className="flex items-start justify-between mb-2">
+                  <div className={`w-7 h-7 md:w-10 md:h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    doc.color === 'blue' ? 'bg-blue-500/20' :
+                    doc.color === 'green' ? 'bg-green-500/20' :
+                    doc.color === 'purple' ? 'bg-purple-500/20' :
+                    doc.color === 'cyan' ? 'bg-cyan-500/20' :
+                    doc.color === 'indigo' ? 'bg-indigo-500/20' :
+                    'bg-gray-500/20'
+                  }`}>
+                    <Icon size={14} className={`md:w-5 md:h-5 ${
+                      doc.color === 'blue' ? 'text-blue-400' :
+                      doc.color === 'green' ? 'text-green-400' :
+                      doc.color === 'purple' ? 'text-purple-400' :
+                      doc.color === 'cyan' ? 'text-cyan-400' :
+                      doc.color === 'indigo' ? 'text-indigo-400' :
+                      'text-gray-400'
+                    }`} />
+                  </div>
+                  {isUrgent && (
+                    <Badge variant="destructive" className="text-[9px] md:text-xs px-1.5 py-0.5 h-4 md:h-5">URGENT</Badge>
+                  )}
+                </div>
+
+                {/* Document Type and Number */}
+                <div className="mb-1.5">
+                  <div className="text-[10px] md:text-xs text-muted-foreground mb-0.5 line-clamp-1">{doc.type}</div>
+                  <div className="font-bold text-xs md:text-sm truncate">{doc.number}</div>
+                </div>
+
+                {/* Expiry Date */}
+                {doc.expiryDate && (
+                  <div className="mb-1.5">
+                    <div className="text-[10px] md:text-xs text-muted-foreground">Expires:</div>
+                    <div className="text-[10px] md:text-xs font-semibold">
+                      {new Date(doc.expiryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Status */}
+                <div className="mb-2">
+                  <div className={`text-[10px] md:text-xs font-semibold ${doc.statusInfo.color} line-clamp-1 mb-0.5`}>
+                    {doc.statusInfo.label}
+                  </div>
+                  <div className="text-[9px] md:text-[10px] text-muted-foreground line-clamp-1">
+                    {isOverdue ? 'Immediate Action Required' : isUrgent ? 'Action Required' : doc.statusInfo.priority === 'attention' ? 'Pending Documents' : 'Valid'}
+                  </div>
+                </div>
+
+                {/* Action Button */}
+                <Button 
+                  size="sm" 
+                  variant={isUrgent ? 'destructive' : doc.statusInfo.priority === 'attention' ? 'secondary' : 'outline'}
+                  className="w-full text-[10px] md:text-xs h-7 md:h-8 mt-auto"
+                >
+                  <span className="truncate">
+                    {isOverdue ? 'Update Now' : isUrgent ? 'Start Renewal' : doc.statusInfo.priority === 'attention' ? 'Upload Docs' : 'View Details'}
+                  </span>
+                  <ChevronRight size={10} className="ml-1 md:w-3 md:h-3 flex-shrink-0" />
+                </Button>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Tasks & Calendar Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+        {/* Tasks & To-Do List */}
+        <Card className="p-3 md:p-4">
+          <h3 className="text-sm md:text-base font-semibold mb-2 md:mb-3 flex items-center gap-2">
+            <Clock size={14} className="md:w-4 md:h-4" />
+            <span className="text-xs md:text-sm">My Tasks & To-Do List</span>
+          </h3>
+          <div className="space-y-1.5 md:space-y-2 mb-3 md:mb-4 max-h-[400px] overflow-y-auto">
+            {tasks.slice(0, 5).map((task, idx) => (
+              <div key={idx} className="flex items-start gap-2 p-2 rounded-lg bg-white/5 border border-white/10">
+                <input type="checkbox" className="mt-0.5 md:mt-1 w-3.5 h-3.5 md:w-4 md:h-4" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs md:text-sm font-medium line-clamp-1">{task.title}</div>
+                  <div className="text-[10px] md:text-xs text-muted-foreground flex items-center gap-1.5 md:gap-2 mt-0.5 md:mt-1 flex-wrap">
+                    <span>Due: {task.dueDate ? task.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}</span>
+                    <Badge variant={task.priority === 'HIGH' ? 'destructive' : 'warning'} className="text-[10px] md:text-xs px-1.5 py-0.5">
+                      {task.priority}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {/* Mock completed tasks */}
+            <div className="flex items-start gap-2 p-2 rounded-lg bg-green-500/10 border border-green-500/20 opacity-60">
+              <CheckCircle2 size={14} className="mt-0.5 md:mt-1 text-green-400 md:w-4 md:h-4" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs md:text-sm font-medium line-through line-clamp-1">Update contact information</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1">Completed: Dec 28, 2025</div>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 p-2 rounded-lg bg-green-500/10 border border-green-500/20 opacity-60">
+              <CheckCircle2 size={14} className="mt-0.5 md:mt-1 text-green-400 md:w-4 md:h-4" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs md:text-sm font-medium line-through line-clamp-1">Submit residence permit photos</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1">Completed: Dec 20, 2025</div>
+              </div>
+            </div>
+          </div>
+          <div className="pt-2 md:pt-3 border-t border-white/10">
+            <div className="flex items-center justify-between text-[10px] md:text-xs mb-1.5 md:mb-2">
+              <span className="text-muted-foreground">{completedTasks} of {totalTasks} tasks completed</span>
+              <span className="font-semibold">{Math.round((completedTasks / totalTasks) * 100)}%</span>
+            </div>
+            <div className="w-full bg-white/10 rounded-full h-1.5 md:h-2">
+              <div 
+                className="bg-green-400 h-1.5 md:h-2 rounded-full transition-all"
+                style={{ width: `${(completedTasks / totalTasks) * 100}%` }}
+              />
+            </div>
+          </div>
+        </Card>
+
+        {/* Calendar View */}
+        <Card className="p-3 md:p-4">
+          <div className="flex items-center justify-between mb-2 md:mb-3">
+            <h3 className="text-sm md:text-base font-semibold flex items-center gap-2">
+              <CalendarIcon size={14} className="md:w-4 md:h-4" />
+              <span className="text-xs md:text-sm">My Upcoming Deadlines</span>
+            </h3>
+            <div className="flex items-center gap-1 md:gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="h-7 w-7 md:h-8 md:w-8 p-0">
+                <ChevronLeft size={14} className="md:w-4 md:h-4" />
+              </Button>
+              <span className="text-[10px] md:text-xs font-medium min-w-[100px] md:min-w-[120px] text-center">
+                {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="h-7 w-7 md:h-8 md:w-8 p-0">
+                <ChevronRight size={14} className="md:w-4 md:h-4" />
+              </Button>
+            </div>
+          </div>
+          
+          {/* Calendar Grid */}
+          <div className="grid grid-cols-7 gap-0.5 md:gap-1 mb-2 md:mb-3">
+            {dayNames.map(day => (
+              <div key={day} className="text-[10px] md:text-xs text-center text-muted-foreground p-0.5 md:p-1 font-semibold">
+                {day}
+              </div>
+            ))}
+            {getDaysInMonth(currentMonth).map((day, idx) => {
+              const events = getEventsForDate(day || 0);
+              const isToday = day === new Date().getDate() && 
+                            currentMonth.getMonth() === new Date().getMonth() &&
+                            currentMonth.getFullYear() === new Date().getFullYear();
+              
+              return (
+                <div 
+                  key={idx} 
+                  className={`aspect-square p-0.5 md:p-1 text-[10px] md:text-xs ${
+                    !day ? 'bg-transparent' :
+                    isToday ? 'bg-primary/20 border border-primary rounded' :
+                    events.length > 0 ? 'bg-white/5 rounded' :
+                    'hover:bg-white/5 rounded'
+                  }`}
+                >
+                  {day && (
+                    <>
+                      <div className={`font-semibold ${isToday ? 'text-primary' : ''}`}>{day}</div>
+                      {events.map((event, eIdx) => {
+                        const days = calculateDaysUntilExpiry(event.expiryDate!);
+                        const isOverdue = days !== null && days < 0;
+                        const isUrgent = days !== null && days <= 14;
+                        return (
+                          <div 
+                            key={eIdx} 
+                            className={`text-[7px] md:text-[8px] mt-0.5 md:mt-1 p-0.5 md:p-1 rounded truncate ${
+                              isOverdue || isUrgent ? 'bg-red-500/50 text-white' :
+                              'bg-orange-500/50 text-white'
+                            }`}
+                            title={event.type}
+                          >
+                            {event.type}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Timeline */}
+          <div className="pt-2 md:pt-3 border-t border-white/10">
+            <div className="space-y-1.5 md:space-y-2">
+              {upcomingDeadlines.slice(0, 4).map((deadline, idx) => {
+                const days = calculateDaysUntilExpiry(deadline.expiryDate!);
+                const isOverdue = days !== null && days < 0;
+                const isUrgent = days !== null && days <= 14;
+                return (
+                  <div key={idx} className="flex items-center gap-1.5 md:gap-2 text-[10px] md:text-xs">
+                    <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full flex-shrink-0 ${
+                      isOverdue || isUrgent ? 'bg-red-400' :
+                      days !== null && days <= 30 ? 'bg-orange-400' :
+                      'bg-green-400'
+                    }`} />
+                    <span className="text-muted-foreground flex-shrink-0">
+                      {new Date(deadline.expiryDate!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                    <span className="font-medium truncate">- {deadline.type}</span>
+                    <Badge variant={isOverdue || isUrgent ? 'destructive' : days !== null && days <= 30 ? 'warning' : 'default'} className="text-[9px] md:text-xs px-1.5 py-0.5 ml-auto flex-shrink-0">
+                      {isOverdue ? 'Overdue!' : isUrgent ? 'Action' : 'Safe'}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Notifications & Help Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+        {/* Notifications */}
+        <Card className="p-3 md:p-4">
+          <h3 className="text-sm md:text-base font-semibold mb-2 md:mb-3 flex items-center gap-2">
+            <AlertCircle size={14} className="md:w-4 md:h-4" />
+            <span className="text-xs md:text-sm">Notifications</span>
+          </h3>
+          <div className="space-y-1.5 md:space-y-2">
+            {notifications.slice(0, 3).map((notif, idx) => (
+              <div key={idx} className={`flex items-start gap-1.5 md:gap-2 p-2 rounded-lg ${
+                notif.type === 'error' ? 'bg-red-500/10 border border-red-500/20' :
+                'bg-orange-500/10 border border-orange-500/20'
+              }`}>
+                <AlertCircle size={14} className={`mt-0.5 flex-shrink-0 md:w-4 md:h-4 ${notif.type === 'error' ? 'text-red-400' : 'text-orange-400'}`} />
+                <div className="text-[10px] md:text-xs flex-1 leading-relaxed">{notif.message}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Help & Kuwait Law */}
+        <div className="space-y-3 md:space-y-4">
+          <Card className="p-3 md:p-4">
+            <h3 className="text-sm md:text-base font-semibold mb-2 md:mb-3 flex items-center gap-2">
+              <HelpCircle size={14} className="md:w-4 md:h-4" />
+              <span className="text-xs md:text-sm">Need Help?</span>
+            </h3>
+            <div className="space-y-1.5 md:space-y-2">
+              <Button variant="outline" size="sm" className="w-full justify-start text-xs md:text-sm h-8 md:h-9">
+                Contact HR Department
+              </Button>
+              <Button variant="outline" size="sm" className="w-full justify-start text-xs md:text-sm h-8 md:h-9">
+                View Renewal Guidelines
+              </Button>
+              <Button variant="outline" size="sm" className="w-full justify-start text-xs md:text-sm h-8 md:h-9">
+                Download Required Forms
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="p-3 md:p-4">
+            <h3 className="text-sm md:text-base font-semibold mb-2 md:mb-3 flex items-center gap-2">
+              <Globe size={14} className="md:w-4 md:h-4" />
+              <span className="text-xs md:text-sm">Kuwait Law Information</span>
+            </h3>
+            <div className="space-y-1.5 md:space-y-2">
+              <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-[10px] md:text-xs font-semibold mb-0.5 md:mb-1">6-Month Travel Limit</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Monitor your days outside Kuwait.</div>
+              </div>
+              <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-[10px] md:text-xs font-semibold mb-0.5 md:mb-1">Article 18 Requirements</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Keep work permit current.</div>
+              </div>
+              <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-[10px] md:text-xs font-semibold mb-0.5 md:mb-1">Document Checklist</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">View required documents for renewal.</div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function EmployeeProfilePage() {
   const { t } = useTranslation();
@@ -808,8 +1319,8 @@ export default function EmployeeProfilePage() {
                   <Globe size={20} className="text-indigo-400" />
                 </div>
                 <div className="text-left">
-                  <div className="font-semibold text-base">Immigration</div>
-                  <div className="text-xs text-muted-foreground">Work permits & visas</div>
+                  <div className="font-semibold text-base">Immigration & Documents</div>
+                  <div className="text-xs text-muted-foreground">Work permits, visas & renewals</div>
                 </div>
               </div>
             </AccordionTrigger>
@@ -820,64 +1331,7 @@ export default function EmployeeProfilePage() {
                   <p>No immigration records found</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {immigration.next_renewal_date && (
-                    <div className={`p-3 rounded-lg border-2 ${
-                      immigration.renewal_priority === 'Urgent' ? 'bg-red-500/20 border-red-500/50' :
-                      immigration.renewal_priority === 'High' ? 'bg-orange-500/20 border-orange-500/50' :
-                      'bg-blue-500/20 border-blue-500/50'
-                    }`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <AlertCircle size={18} className={immigration.renewal_priority === 'Urgent' ? 'text-red-400' : 'text-orange-400'} />
-                        <span className="font-semibold text-sm">Next Renewal</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {immigration.next_renewal_action} - {new Date(immigration.next_renewal_date).toLocaleDateString()}
-                      </div>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {immigration.work_permit_number && (
-                      <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                        <div className="text-xs text-muted-foreground mb-1">Work Permit</div>
-                        <div className="font-semibold">{immigration.work_permit_number}</div>
-                        {immigration.work_permit_expiry_date && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Expires: {new Date(immigration.work_permit_expiry_date).toLocaleDateString()}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {immigration.residence_permit_number && (
-                      <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                        <div className="text-xs text-muted-foreground mb-1">Residence Permit</div>
-                        <div className="font-semibold">{immigration.residence_permit_number}</div>
-                        {immigration.residence_permit_expiry_date && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Expires: {new Date(immigration.residence_permit_expiry_date).toLocaleDateString()}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {immigration.passport_number && (
-                      <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                        <div className="text-xs text-muted-foreground mb-1">Passport</div>
-                        <div className="font-semibold">{immigration.passport_number}</div>
-                        {immigration.passport_expiry_date && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Expires: {new Date(immigration.passport_expiry_date).toLocaleDateString()}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {immigration.civil_id_number && (
-                      <div className="p-3 rounded-lg bg-white/5 border border-white/10">
-                        <div className="text-xs text-muted-foreground mb-1">Civil ID</div>
-                        <div className="font-semibold">{immigration.civil_id_number}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <EmployeeImmigrationView immigration={immigration} employee={emp} />
               )}
             </AccordionContent>
           </AccordionItem>

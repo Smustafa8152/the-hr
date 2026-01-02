@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '../components/common/UIComponents';
-import { FileText } from 'lucide-react';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { employeeImmigrationService, EmployeeImmigration } from '../services/employeeImmigrationService';
@@ -18,7 +17,14 @@ import {
   Filter,
   Eye,
   Edit,
-  Plus
+  Plus,
+  CheckCircle2,
+  TrendingUp,
+  Download,
+  Bell,
+  FileText,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
@@ -56,6 +62,9 @@ export default function ImmigrationManagementPage() {
     civil_id_status: 'Valid',
     renewal_priority: 'Normal'
   });
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [dateRangeFilter, setDateRangeFilter] = useState<string>('month');
 
   useEffect(() => {
     loadData();
@@ -177,6 +186,10 @@ export default function ImmigrationManagementPage() {
   };
 
   // Calculate statistics
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  
   const stats = {
     total: immigrations.length,
     urgent: immigrations.filter(i => i.renewal_priority === 'Urgent').length,
@@ -184,10 +197,24 @@ export default function ImmigrationManagementPage() {
     expiringThisMonth: immigrations.filter(i => {
       if (!i.next_renewal_date) return false;
       const expiry = new Date(i.next_renewal_date);
-      const today = new Date();
-      const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, today.getDate());
-      return expiry >= today && expiry <= nextMonth;
-    }).length
+      return expiry >= monthStart && expiry <= monthEnd;
+    }).length,
+    pendingRenewals: immigrations.filter(i => 
+      i.work_permit_status === 'Pending Renewal' || 
+      i.residence_permit_status === 'Pending Renewal' || 
+      i.health_insurance_status === 'Pending Renewal'
+    ).length,
+    activePermits: immigrations.filter(i => 
+      (i.work_permit_status === 'Active' || !i.work_permit_status) &&
+      (i.residence_permit_status === 'Active' || !i.residence_permit_status)
+    ).length,
+    complianceRate: immigrations.length > 0 
+      ? Math.round((immigrations.filter(i => 
+          (i.work_permit_status === 'Active' || !i.work_permit_status) &&
+          (i.residence_permit_status === 'Active' || !i.residence_permit_status) &&
+          (!i.next_renewal_date || new Date(i.next_renewal_date) > today)
+        ).length / immigrations.length) * 100)
+      : 100
   };
 
   // Filter data
@@ -243,28 +270,50 @@ export default function ImmigrationManagementPage() {
         </Button>
       </div>
 
+      {/* Filters at Top */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Department" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Departments</SelectItem>
+            {Array.from(new Set(employees.map(e => (e as any).departments?.name || e.department).filter(Boolean))).map(dept => (
+              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="Active">Active</SelectItem>
+            <SelectItem value="Pending Renewal">Pending Renewal</SelectItem>
+            <SelectItem value="Expired">Expired</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={dateRangeFilter} onValueChange={setDateRangeFilter}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="Date Range" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="month">{new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</SelectItem>
+            <SelectItem value="quarter">This Quarter</SelectItem>
+            <SelectItem value="year">This Year</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden border-red-500/20 bg-red-500/5">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Expatriates</p>
-                <p className="text-3xl font-bold mt-2">{stats.total}</p>
-              </div>
-              <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
-                <User size={24} className="text-blue-400" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Urgent Renewals</p>
-                <p className="text-3xl font-bold text-red-400 mt-2">{stats.urgent}</p>
+                <p className="text-sm text-muted-foreground">Expiring This Month</p>
+                <p className="text-3xl font-bold text-red-400 mt-2">{stats.expiringThisMonth}</p>
               </div>
               <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
                 <AlertCircle size={24} className="text-red-400" />
@@ -273,12 +322,12 @@ export default function ImmigrationManagementPage() {
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden border-orange-500/20 bg-orange-500/5">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">High Priority</p>
-                <p className="text-3xl font-bold text-orange-400 mt-2">{stats.high}</p>
+                <p className="text-sm text-muted-foreground">Pending Renewals</p>
+                <p className="text-3xl font-bold text-orange-400 mt-2">{stats.pendingRenewals}</p>
               </div>
               <div className="w-12 h-12 rounded-full bg-orange-500/20 flex items-center justify-center">
                 <Clock size={24} className="text-orange-400" />
@@ -287,67 +336,272 @@ export default function ImmigrationManagementPage() {
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden border-green-500/20 bg-green-500/5">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Expiring This Month</p>
-                <p className="text-3xl font-bold text-yellow-400 mt-2">{stats.expiringThisMonth}</p>
+                <p className="text-sm text-muted-foreground">Active Permits</p>
+                <p className="text-3xl font-bold text-green-400 mt-2">{stats.activePermits}</p>
               </div>
-              <div className="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center">
-                <Calendar size={24} className="text-yellow-400" />
+              <div className="w-12 h-12 rounded-full bg-green-500/20 flex items-center justify-center">
+                <CheckCircle2 size={24} className="text-green-400" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden border-blue-500/20 bg-blue-500/5">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Compliance Rate</p>
+                <p className="text-3xl font-bold text-blue-400 mt-2">{stats.complianceRate}%</p>
+              </div>
+              <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center">
+                <TrendingUp size={24} className="text-blue-400" />
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                <Input
-                  placeholder="Search by employee name, ID, or permit number..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
+      {/* Main Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Calendar View */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Calendar View */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar size={20} />
+                  Calendar View
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}>
+                    <ChevronLeft size={16} />
+                  </Button>
+                  <span className="text-sm font-medium min-w-[150px] text-center">
+                    {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}>
+                    <ChevronRight size={16} />
+                  </Button>
+                </div>
               </div>
-            </div>
-            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priorities</SelectItem>
-                <SelectItem value="Urgent">Urgent</SelectItem>
-                <SelectItem value="High">High</SelectItem>
-                <SelectItem value="Normal">Normal</SelectItem>
-                <SelectItem value="Low">Low</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Pending Renewal">Pending Renewal</SelectItem>
-                <SelectItem value="Expired">Expired</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+            </CardHeader>
+            <CardContent>
+              {/* Calendar Legend */}
+              <div className="flex items-center gap-4 mb-4 text-xs">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <span>Safe (30+ days)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-orange-500" />
+                  <span>Attention (14 days)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500" />
+                  <span>Critical (Today)</span>
+                </div>
+              </div>
+              
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7 gap-1">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="text-xs text-center text-muted-foreground p-2 font-semibold">
+                    {day}
+                  </div>
+                ))}
+                {(() => {
+                  const year = currentMonth.getFullYear();
+                  const month = currentMonth.getMonth();
+                  const firstDay = new Date(year, month, 1);
+                  const lastDay = new Date(year, month + 1, 0);
+                  const daysInMonth = lastDay.getDate();
+                  const startingDayOfWeek = firstDay.getDay();
+                  
+                  const days = [];
+                  for (let i = 0; i < startingDayOfWeek; i++) {
+                    days.push(null);
+                  }
+                  for (let i = 1; i <= daysInMonth; i++) {
+                    days.push(i);
+                  }
+                  
+                  return days.map((day, idx) => {
+                    if (!day) return <div key={idx} className="aspect-square" />;
+                    
+                    const dayDate = new Date(year, month, day);
+                    const events = sortedData.filter(imm => {
+                      if (!imm.next_renewal_date) return false;
+                      const eventDate = new Date(imm.next_renewal_date);
+                      return eventDate.getDate() === day && 
+                             eventDate.getMonth() === month && 
+                             eventDate.getFullYear() === year;
+                    });
+                    
+                    const isToday = day === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+                    
+                    return (
+                      <div 
+                        key={idx} 
+                        className={`aspect-square p-1 text-xs border rounded ${
+                          isToday ? 'bg-primary/20 border-primary' :
+                          events.length > 0 ? 'bg-white/5' :
+                          'hover:bg-white/5'
+                        }`}
+                      >
+                        <div className={`font-semibold ${isToday ? 'text-primary' : ''}`}>{day}</div>
+                        {events.slice(0, 2).map((event, eIdx) => {
+                          const daysUntil = event.daysUntilExpiry || 0;
+                          const isCritical = daysUntil <= 0;
+                          const isAttention = daysUntil > 0 && daysUntil <= 14;
+                          return (
+                            <div 
+                              key={eIdx} 
+                              className={`text-[8px] mt-1 p-1 rounded truncate ${
+                                isCritical ? 'bg-red-500/50 text-white' :
+                                isAttention ? 'bg-orange-500/50 text-white' :
+                                'bg-green-500/50 text-white'
+                              }`}
+                              title={`${event.next_renewal_action} - ${event.employee?.first_name} ${event.employee?.last_name}`}
+                            >
+                              {event.next_renewal_action} - {event.employee?.first_name}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Immigration Records Table */}
+          {/* Upcoming Deadlines & Tasks */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Upcoming Deadlines & Tasks</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {sortedData.slice(0, 4).map((imm) => {
+                  const daysUntil = imm.daysUntilExpiry || 0;
+                  const isUrgent = daysUntil <= 0 || daysUntil <= 14;
+                  const isAttention = daysUntil > 14 && daysUntil <= 30;
+                  
+                  return (
+                    <Card 
+                      key={imm.id} 
+                      className={`p-4 border-2 ${
+                        isUrgent ? 'border-red-500/50 bg-red-500/10' :
+                        isAttention ? 'border-orange-500/50 bg-orange-500/10' :
+                        'border-green-500/50 bg-green-500/10'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-semibold">
+                              {imm.next_renewal_action} - {imm.employee?.first_name} {imm.employee?.last_name}
+                            </h4>
+                            <Badge variant={isUrgent ? 'destructive' : isAttention ? 'warning' : 'default'}>
+                              {isUrgent ? 'URGENT' : isAttention ? 'Attention' : 'Safe'}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Expires: {imm.next_renewal_date ? new Date(imm.next_renewal_date).toLocaleDateString() : 'N/A'}
+                            {daysUntil !== null && (
+                              <span className={`ml-2 ${isUrgent ? 'text-red-400' : isAttention ? 'text-orange-400' : 'text-green-400'}`}>
+                                {daysUntil < 0 ? `${Math.abs(daysUntil)} days overdue` : `${daysUntil} days remaining`}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <Button variant="ghost" size="sm">
+                          {isUrgent ? 'Assign Task' : 'View Details'}
+                        </Button>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column */}
+        <div className="space-y-6">
+          {/* Quick Actions */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button variant="outline" className="w-full justify-start" size="sm">
+                <FileText size={16} className="mr-2" />
+                Generate Compliance Report
+              </Button>
+              <Button variant="outline" className="w-full justify-start" size="sm">
+                <Download size={16} className="mr-2" />
+                Export Calendar
+              </Button>
+              <Button variant="outline" className="w-full justify-start" size="sm">
+                <Bell size={16} className="mr-2" />
+                Bulk Reminder
+              </Button>
+              <Button className="w-full justify-start" size="sm" onClick={() => setAddModalOpen(true)}>
+                <Plus size={16} className="mr-2" />
+                Add New Record
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Kuwait Law Compliance */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Kuwait Law Compliance</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <CheckCircle2 size={16} className="text-green-400" />
+                  <span>Article 18 Work Permits Tracked</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <CheckCircle2 size={16} className="text-green-400" />
+                  <span>6-Month Travel Limit Monitored</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <AlertCircle size={16} className="text-orange-400" />
+                  <span>{stats.urgent + stats.high} Employees Need Attention</span>
+                </div>
+              </div>
+              {/* Simple compliance chart */}
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <div className="h-20 flex items-end justify-between gap-1">
+                  {['Jan', 'Mar', 'May', 'Jul', 'Sep', 'Nov'].map((month, idx) => (
+                    <div key={month} className="flex-1 flex flex-col items-center">
+                      <div 
+                        className="w-full bg-primary rounded-t"
+                        style={{ height: `${60 + (idx * 10)}%` }}
+                      />
+                      <span className="text-[10px] text-muted-foreground mt-1">{month}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Active Tasks & Assignments Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Immigration Records ({sortedData.length})</CardTitle>
+          <CardTitle>Active Tasks & Assignments</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -363,95 +617,73 @@ export default function ImmigrationManagementPage() {
                 <thead>
                   <tr className="border-b border-white/10">
                     <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Employee</th>
-                    <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Work Permit</th>
-                    <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Residence Permit</th>
-                    <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Next Renewal</th>
-                    <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Priority</th>
+                    <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Document Type</th>
+                    <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Assigned To</th>
+                    <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Due Date</th>
+                    <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Status</th>
                     <th className="text-left p-4 text-sm font-semibold text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedData.map((imm) => (
-                    <tr key={imm.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                      <td className="p-4">
-                        <div>
-                          <p className="font-semibold">
-                            {imm.employee?.first_name} {imm.employee?.last_name}
+                  {sortedData.slice(0, 10).map((imm) => {
+                    const daysUntil = imm.daysUntilExpiry || 0;
+                    const isOverdue = daysUntil < 0;
+                    const isUrgent = daysUntil <= 14;
+                    
+                    return (
+                      <tr key={imm.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td className="p-4">
+                          <div>
+                            <p className="font-semibold">
+                              {imm.employee?.first_name} {imm.employee?.last_name}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{imm.employee?.employee_id}</p>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          <p className="text-sm">{imm.next_renewal_action || 'N/A'}</p>
+                        </td>
+                        <td className="p-4">
+                          <p className="text-sm text-muted-foreground">
+                            {imm.last_renewal_processed_by ? 'HR Admin' : 'Employee Self'}
                           </p>
-                          <p className="text-sm text-muted-foreground">{imm.employee?.employee_id}</p>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div>
-                          <p className="text-sm">{imm.work_permit_number || 'N/A'}</p>
-                          <StatusBadge status={(imm.work_permit_status || 'N/A') as any} />
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div>
-                          <p className="text-sm">{imm.residence_permit_number || 'N/A'}</p>
-                          <StatusBadge status={(imm.residence_permit_status || 'N/A') as any} />
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div>
+                        </td>
+                        <td className="p-4">
                           <p className="text-sm font-medium">
-                            {imm.next_renewal_action || 'N/A'}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
                             {imm.next_renewal_date ? new Date(imm.next_renewal_date).toLocaleDateString() : 'N/A'}
                           </p>
-                          {imm.daysUntilExpiry !== null && imm.daysUntilExpiry !== undefined && (
-                            <p className={`text-xs mt-1 ${
-                              imm.daysUntilExpiry < 0 ? 'text-red-400' :
-                              imm.daysUntilExpiry <= 30 ? 'text-orange-400' :
-                              'text-green-400'
-                            }`}>
-                              {imm.daysUntilExpiry < 0 
-                                ? `${Math.abs(imm.daysUntilExpiry)} days overdue`
-                                : `${imm.daysUntilExpiry} days remaining`
-                              }
-                            </p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <Badge 
-                          variant={
-                            imm.renewal_priority === 'Urgent' ? 'destructive' :
-                            imm.renewal_priority === 'High' ? 'warning' :
-                            'outline'
-                          }
-                        >
-                          {imm.renewal_priority || 'Normal'}
-                        </Badge>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleViewDetails(imm)}
+                        </td>
+                        <td className="p-4">
+                          <Badge 
+                            variant={
+                              isOverdue ? 'destructive' :
+                              isUrgent ? 'warning' :
+                              'default'
+                            }
                           >
-                            <Eye size={16} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleEdit(imm)}
-                          >
-                            <Edit size={16} />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            {isOverdue ? 'Overdue' : isUrgent ? 'In Progress' : daysUntil <= 30 ? 'Pending' : 'On Track'}
+                          </Badge>
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => handleViewDetails(imm)}>
+                              <Eye size={16} />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleEdit(imm)}>
+                              <Edit size={16} />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           )}
         </CardContent>
       </Card>
+
 
       {/* View Details Modal */}
       <Dialog open={viewModalOpen} onOpenChange={setViewModalOpen}>

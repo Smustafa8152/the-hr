@@ -6,6 +6,7 @@ import Modal from '../components/common/Modal';
 import { attendanceLocationService, AttendanceLocationSettings } from '../services/attendanceLocationService';
 import { employeeAttendanceLocationService, EmployeeAttendanceLocation } from '../services/employeeAttendanceLocationService';
 import { faceRecognitionService, captureFaceFromVideo } from '../services/faceRecognitionService';
+import MultiAngleFaceCapture from '../components/face/MultiAngleFaceCapture';
 import { attendanceService, AttendanceLog } from '../services/attendanceService';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
@@ -59,27 +60,7 @@ export default function EmployeeAttendancePage() {
     };
   }, [user?.company_id, user?.employee_id]);
 
-  useEffect(() => {
-    // Start camera when face capture modal opens
-    if (isFaceCaptureModalOpen) {
-      setCameraReady(false);
-      startCamera();
-    } else {
-      // Stop camera when modal closes
-      stopCamera();
-    }
-  }, [isFaceCaptureModalOpen]);
-
-  useEffect(() => {
-    // Start camera when face capture modal opens
-    if (isFaceCaptureModalOpen) {
-      setCameraReady(false);
-      startCamera();
-    } else {
-      // Stop camera when modal closes
-      stopCamera();
-    }
-  }, [isFaceCaptureModalOpen]);
+  // Note: Camera is now managed by MultiAngleFaceCapture component
 
   const loadLocationSettings = async () => {
     if (!user?.company_id) return;
@@ -307,55 +288,15 @@ export default function EmployeeAttendancePage() {
     setCameraReady(false);
   };
 
-  const captureFace = async () => {
-    if (!videoRef.current || !user?.employee_id) return;
-
-    try {
-      setIsCapturing(true);
-
-      // If no face image exists, save it
-      if (!hasFaceImage) {
-        const result = await faceRecognitionService.captureAndSaveFace(
-          user.employee_id,
-          videoRef.current
-        );
-
-        if (!result.success) {
-          toast.error(result.error || 'Failed to capture face');
-          return;
-        }
-
-        setHasFaceImage(true);
-        toast.success('Face image saved successfully!');
-        setIsFaceCaptureModalOpen(false);
-        return;
-      }
-
-      // Verify face against stored image
-      const imageData = await captureFaceFromVideo(videoRef.current);
-      if (!imageData) {
-        toast.error('No face detected. Please ensure your face is clearly visible.');
-        return;
-      }
-
-      const verification = await faceRecognitionService.verifyFace(
-        user.employee_id,
-        imageData
-      );
-
-      setFaceVerified(verification.verified);
-
-      if (verification.verified) {
-        toast.success(`Face verified! Confidence: ${verification.confidence.toFixed(1)}%`);
-        setIsFaceCaptureModalOpen(false);
-      } else {
-        toast.error(`Face verification failed. Confidence: ${verification.confidence.toFixed(1)}%`);
-      }
-    } catch (error: any) {
-      console.error('Error capturing/verifying face:', error);
-      toast.error(error.message || 'Failed to process face');
-    } finally {
-      setIsCapturing(false);
+  const handleFaceCaptureComplete = async () => {
+    setIsFaceCaptureModalOpen(false);
+    await checkFaceImage();
+    if (hasFaceImage) {
+      // If verifying, set face verified
+      setFaceVerified(true);
+    } else {
+      // If first time capture, set hasFaceImage
+      setHasFaceImage(true);
     }
   };
 
@@ -659,95 +600,18 @@ export default function EmployeeAttendancePage() {
         </CardContent>
       </Card>
 
-      {/* Face Capture Modal */}
-      <Modal
-        isOpen={isFaceCaptureModalOpen}
-        onClose={() => {
-          setIsFaceCaptureModalOpen(false);
-          stopCamera();
-        }}
-        title={hasFaceImage ? 'Face Verification' : 'Capture Face Image'}
-        size="lg"
-      >
-        <div className="space-y-4">
-          {!cameraReady && (
-            <div className="flex items-center justify-center py-12 bg-black rounded-lg">
-              <div className="text-center">
-                <Loader2 size={32} className="animate-spin text-primary mx-auto mb-4" />
-                <p className="text-muted-foreground">Starting camera...</p>
-              </div>
-            </div>
-          )}
-          <div className={`relative bg-black rounded-lg overflow-hidden ${!cameraReady ? 'hidden' : ''}`}>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              muted
-              className="w-full"
-              style={{ maxHeight: '500px', objectFit: 'contain' }}
-              onLoadedMetadata={() => {
-                if (videoRef.current) {
-                  videoRef.current.play().then(() => {
-                    setCameraReady(true);
-                  }).catch((error) => {
-                    console.error('Error playing video:', error);
-                    setCameraReady(false);
-                  });
-                }
-              }}
-              onCanPlay={() => {
-                setCameraReady(true);
-              }}
-            />
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="border-2 border-primary rounded-lg" style={{ width: '250px', height: '300px' }} />
-            </div>
-          </div>
-
-          <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-            <p className="text-sm text-blue-400">
-              {hasFaceImage 
-                ? 'Position your face within the frame and click "Verify Face" to confirm your identity.'
-                : 'Position your face within the frame. This will be saved for future attendance verification.'}
-            </p>
-          </div>
-
-          <div className="flex gap-3">
-            <Button
-              onClick={captureFace}
-              disabled={isCapturing || !cameraReady}
-              className="flex-1"
-            >
-              {isCapturing ? (
-                <>
-                  <Loader2 size={18} className="mr-2 animate-spin" />
-                  Processing...
-                </>
-              ) : !cameraReady ? (
-                <>
-                  <Loader2 size={18} className="mr-2 animate-spin" />
-                  Starting Camera...
-                </>
-              ) : (
-                <>
-                  <Camera size={18} className="mr-2" />
-                  {hasFaceImage ? 'Verify Face' : 'Capture Face'}
-                </>
-              )}
-            </Button>
-            <Button
-              onClick={() => {
-                setIsFaceCaptureModalOpen(false);
-                stopCamera();
-              }}
-              variant="outline"
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {/* Multi-Angle Face Capture Modal */}
+      {isFaceCaptureModalOpen && user?.employee_id && (
+        <MultiAngleFaceCapture
+          employeeId={user.employee_id}
+          onComplete={handleFaceCaptureComplete}
+          onCancel={() => {
+            setIsFaceCaptureModalOpen(false);
+            stopCamera();
+          }}
+          isVerification={hasFaceImage}
+        />
+      )}
 
       {/* Attendance Logs Modal */}
       <Modal

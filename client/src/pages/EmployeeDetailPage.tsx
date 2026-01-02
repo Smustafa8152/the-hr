@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRoute } from 'wouter';
 import { useTranslation } from 'react-i18next';
-import { User, FileText, Clock, DollarSign, Shield, ArrowLeft, Upload, Download, MapPin, Phone, Mail, Calendar, Briefcase, Building2, X, Trash2, GraduationCap, CreditCard, Plus, Edit2, Globe, FileCheck, AlertCircle } from 'lucide-react';
+import { User, FileText, Clock, DollarSign, Shield, ArrowLeft, Upload, Download, MapPin, Phone, Mail, Calendar, Briefcase, Building2, X, Trash2, GraduationCap, CreditCard, Plus, Edit2, Globe, FileCheck, AlertCircle, Users, Home, Fingerprint, CheckCircle2, HelpCircle, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge, Tabs, TabsList, TabsTrigger, TabsContent } from '../components/common/UIComponents';
 import { employeeService, Employee } from '../services/employeeService';
 import { documentService, Document } from '../services/documentService';
@@ -24,6 +24,511 @@ import { Textarea } from '../components/ui/textarea';
 import { toast } from 'sonner';
 import { StatusBadge } from '../components/common/StatusBadge';
 import { Calendar as CalendarIcon, FileText as FileTextIcon, Clock as ClockIcon } from 'lucide-react';
+
+// Helper function to calculate days until expiry
+const calculateDaysUntilExpiry = (expiryDate: string | undefined): number | null => {
+  if (!expiryDate) return null;
+  const today = new Date();
+  const expiry = new Date(expiryDate);
+  const diffTime = expiry.getTime() - today.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
+
+// Helper function to get document status
+const getDocumentStatus = (daysUntilExpiry: number | null, status?: string): { label: string; color: string; priority: string } => {
+  if (daysUntilExpiry === null) {
+    return { label: status || 'Valid', color: 'text-green-400', priority: 'safe' };
+  }
+  if (daysUntilExpiry < 0) {
+    return { label: 'CRITICAL - Overdue!', color: 'text-red-400', priority: 'critical' };
+  }
+  if (daysUntilExpiry <= 14) {
+    return { label: 'URGENT - ' + Math.abs(daysUntilExpiry) + ' days left', color: 'text-red-400', priority: 'urgent' };
+  }
+  if (daysUntilExpiry <= 30) {
+    return { label: 'Attention - ' + daysUntilExpiry + ' days left', color: 'text-orange-400', priority: 'attention' };
+  }
+  return { label: 'Safe - ' + daysUntilExpiry + ' days left', color: 'text-green-400', priority: 'safe' };
+};
+
+// Helper function to calculate immigration statistics
+const calculateImmigrationStats = (immigration: EmployeeImmigration | null) => {
+  if (!immigration) {
+    return { totalDocuments: 0, requireAction: 0, validDocuments: 0, nextDeadline: null };
+  }
+
+  const documents = [
+    { expiryDate: immigration.civil_id_expiry_date, status: immigration.civil_id_status },
+    { expiryDate: immigration.passport_expiry_date, status: immigration.passport_status },
+    { expiryDate: immigration.work_permit_expiry_date, status: immigration.work_permit_status },
+    { expiryDate: immigration.health_insurance_expiry_date, status: immigration.health_insurance_status },
+    { expiryDate: immigration.residence_permit_expiry_date, status: immigration.residence_permit_status },
+    { expiryDate: null, status: 'Active' } // Fingerprint Registration
+  ].map(doc => ({
+    ...doc,
+    daysUntilExpiry: calculateDaysUntilExpiry(doc.expiryDate || undefined),
+    statusInfo: getDocumentStatus(calculateDaysUntilExpiry(doc.expiryDate || undefined), doc.status)
+  }));
+
+  const totalDocuments = documents.length;
+  const requireAction = documents.filter(d => d.statusInfo.priority === 'urgent' || d.statusInfo.priority === 'critical' || d.statusInfo.priority === 'attention').length;
+  const validDocuments = documents.filter(d => d.statusInfo.priority === 'safe').length;
+  
+  const upcomingDeadlines = documents
+    .filter(d => d.expiryDate)
+    .map(d => ({ expiryDate: d.expiryDate!, date: new Date(d.expiryDate!) }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const nextDeadline = upcomingDeadlines[0] || null;
+
+  return { totalDocuments, requireAction, validDocuments, nextDeadline };
+};
+
+// Admin Immigration View Component (for Employee Detail Page)
+function AdminImmigrationView({ 
+  immigration, 
+  employee,
+  onEdit,
+  onRenewal
+}: { 
+  immigration: EmployeeImmigration; 
+  employee: Employee;
+  onEdit: () => void;
+  onRenewal: () => void;
+}) {
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  
+  // Calculate document statuses
+  const documents = [
+    {
+      type: 'Civil ID',
+      number: immigration.civil_id_number || 'N/A',
+      expiryDate: immigration.civil_id_expiry_date,
+      status: immigration.civil_id_status,
+      icon: Users,
+      color: 'blue'
+    },
+    {
+      type: 'Passport',
+      number: immigration.passport_number || 'N/A',
+      expiryDate: immigration.passport_expiry_date,
+      status: immigration.passport_status,
+      icon: Globe,
+      color: 'green'
+    },
+    {
+      type: 'Work Permit',
+      number: immigration.work_permit_number || 'N/A',
+      expiryDate: immigration.work_permit_expiry_date,
+      status: immigration.work_permit_status,
+      icon: FileCheck,
+      color: 'purple'
+    },
+    {
+      type: 'Health Insurance',
+      number: immigration.health_insurance_number || immigration.health_insurance_provider || 'N/A',
+      expiryDate: immigration.health_insurance_expiry_date,
+      status: immigration.health_insurance_status,
+      icon: Shield,
+      color: 'cyan'
+    },
+    {
+      type: 'Residence Permit (Article 18)',
+      number: immigration.residence_permit_number || 'N/A',
+      expiryDate: immigration.residence_permit_expiry_date,
+      status: immigration.residence_permit_status,
+      icon: Home,
+      color: 'indigo'
+    },
+    {
+      type: 'Fingerprint Registration',
+      number: immigration.civil_id_number || 'N/A',
+      expiryDate: null,
+      status: 'Active',
+      icon: Fingerprint,
+      color: 'gray'
+    }
+  ].map(doc => ({
+    ...doc,
+    daysUntilExpiry: calculateDaysUntilExpiry(doc.expiryDate || undefined),
+    statusInfo: getDocumentStatus(calculateDaysUntilExpiry(doc.expiryDate || undefined), doc.status)
+  }));
+
+  // Calculate statistics
+  const totalDocuments = documents.length;
+  const requireAction = documents.filter(d => d.statusInfo.priority === 'urgent' || d.statusInfo.priority === 'critical' || d.statusInfo.priority === 'attention').length;
+  const validDocuments = documents.filter(d => d.statusInfo.priority === 'safe').length;
+  
+  // Find next deadline
+  const upcomingDeadlines = documents
+    .filter(d => d.expiryDate)
+    .map(d => ({ ...d, date: new Date(d.expiryDate!) }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  const nextDeadline = upcomingDeadlines[0];
+
+  // Generate tasks based on document statuses
+  const tasks = documents
+    .filter(d => d.expiryDate && (d.daysUntilExpiry !== null && d.daysUntilExpiry <= 30))
+    .map(doc => ({
+      id: doc.type,
+      title: `${doc.type === 'Passport' ? 'Submit passport renewal application' : doc.type === 'Work Permit' ? 'Upload work permit supporting documents' : doc.type === 'Health Insurance' ? 'Complete health insurance renewal form' : doc.type === 'Residence Permit (Article 18)' ? 'Submit residence permit photos' : 'Update ' + doc.type.toLowerCase()}`,
+      dueDate: doc.expiryDate ? new Date(doc.expiryDate) : null,
+      priority: doc.statusInfo.priority === 'critical' || doc.statusInfo.priority === 'urgent' ? 'HIGH' : 'MEDIUM',
+      completed: false
+    }));
+
+  const completedTasks = 2; // Mock - would come from task tracking
+  const totalTasks = tasks.length + completedTasks;
+
+  // Generate notifications
+  const notifications = documents
+    .filter(d => d.expiryDate && (d.daysUntilExpiry !== null && d.daysUntilExpiry <= 30))
+    .map(doc => ({
+      type: doc.statusInfo.priority === 'critical' || doc.statusInfo.priority === 'urgent' ? 'error' : 'warning',
+      message: `${doc.type} ${doc.daysUntilExpiry && doc.daysUntilExpiry < 0 ? 'overdue' : doc.daysUntilExpiry && doc.daysUntilExpiry <= 14 ? 'expires in ' + doc.daysUntilExpiry + ' days' : 'needs attention'} - ${doc.statusInfo.priority === 'critical' || doc.statusInfo.priority === 'urgent' ? 'Immediate action required' : 'Start renewal process'}.`
+    }));
+
+  // Calendar helpers
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    const days = [];
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(null);
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push(i);
+    }
+    return days;
+  };
+
+  const getEventsForDate = (day: number) => {
+    if (!day) return [];
+    return upcomingDeadlines.filter(d => {
+      const dDate = new Date(d.expiryDate!);
+      return dDate.getDate() === day && 
+             dDate.getMonth() === currentMonth.getMonth() && 
+             dDate.getFullYear() === currentMonth.getFullYear();
+    });
+  };
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  return (
+    <div className="space-y-4 md:space-y-6">
+      {/* Document Cards Section */}
+      <div>
+        <div className="flex items-center justify-between mb-3 md:mb-4">
+          <h3 className="text-base md:text-lg font-semibold flex items-center gap-2">
+            <FileCheck size={16} className="md:w-[18px] md:h-[18px]" />
+            <span className="hidden md:inline">Immigration Documents</span>
+            <span className="md:hidden">Documents</span>
+          </h3>
+          <div className="flex gap-1 md:gap-2">
+            <Button variant="outline" size="sm" onClick={onRenewal} className="text-xs md:text-sm px-2 md:px-3">
+              <Calendar size={14} className="md:mr-2 md:w-4 md:h-4" />
+              <span className="hidden md:inline">Yearly Renewal</span>
+            </Button>
+            <Button size="sm" onClick={onEdit} className="text-xs md:text-sm px-2 md:px-3">
+              <Edit2 size={14} className="md:mr-2 md:w-4 md:h-4" />
+              <span className="hidden md:inline">Edit</span>
+            </Button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-2 md:gap-3">
+          {documents.map((doc, idx) => {
+            const Icon = doc.icon;
+            const isOverdue = doc.daysUntilExpiry !== null && doc.daysUntilExpiry < 0;
+            const isUrgent = doc.statusInfo.priority === 'urgent' || doc.statusInfo.priority === 'critical';
+            
+            return (
+              <Card key={idx} className={`p-3 md:p-4 border-2 ${
+                isUrgent ? 'border-red-500/50 bg-red-500/10' :
+                doc.statusInfo.priority === 'attention' ? 'border-orange-500/50 bg-orange-500/10' :
+                'border-green-500/50 bg-green-500/10'
+              }`}>
+                <div className="flex items-start justify-between mb-2 md:mb-3">
+                  <div className={`w-8 h-8 md:w-10 md:h-10 rounded-lg ${
+                    doc.color === 'blue' ? 'bg-blue-500/20' :
+                    doc.color === 'green' ? 'bg-green-500/20' :
+                    doc.color === 'purple' ? 'bg-purple-500/20' :
+                    doc.color === 'cyan' ? 'bg-cyan-500/20' :
+                    doc.color === 'indigo' ? 'bg-indigo-500/20' :
+                    'bg-gray-500/20'
+                  } flex items-center justify-center flex-shrink-0`}>
+                    <Icon size={16} className={`md:w-5 md:h-5 ${
+                      doc.color === 'blue' ? 'text-blue-400' :
+                      doc.color === 'green' ? 'text-green-400' :
+                      doc.color === 'purple' ? 'text-purple-400' :
+                      doc.color === 'cyan' ? 'text-cyan-400' :
+                      doc.color === 'indigo' ? 'text-indigo-400' :
+                      'text-gray-400'
+                    }`} />
+                  </div>
+                  {isUrgent && (
+                    <Badge variant="destructive" className="text-[10px] md:text-xs px-1 md:px-2 py-0.5">URGENT</Badge>
+                  )}
+                </div>
+                <div className="mb-1.5 md:mb-2">
+                  <div className="text-[10px] md:text-xs text-muted-foreground mb-0.5 md:mb-1 line-clamp-1">{doc.type}</div>
+                  <div className="font-bold text-xs md:text-sm truncate">{doc.number}</div>
+                </div>
+                {doc.expiryDate && (
+                  <div className="mb-1.5 md:mb-2">
+                    <div className="text-[10px] md:text-xs text-muted-foreground">Expires:</div>
+                    <div className="text-xs md:text-sm font-semibold">
+                      {new Date(doc.expiryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  </div>
+                )}
+                <div className="mb-2 md:mb-3">
+                  <div className={`text-[10px] md:text-xs font-semibold ${doc.statusInfo.color} line-clamp-1`}>
+                    {doc.statusInfo.label}
+                  </div>
+                  <div className="text-[10px] md:text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                    {isOverdue ? 'Immediate Action Required' : isUrgent ? 'Action Required' : doc.statusInfo.priority === 'attention' ? 'Pending Documents' : 'Valid'}
+                  </div>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant={isUrgent ? 'destructive' : doc.statusInfo.priority === 'attention' ? 'secondary' : 'outline'}
+                  className="w-full text-[10px] md:text-xs h-7 md:h-8"
+                  onClick={onEdit}
+                >
+                  <span className="truncate">
+                    {isOverdue ? 'Update Now' : isUrgent ? 'Start Renewal' : doc.statusInfo.priority === 'attention' ? 'Upload Docs' : 'View Details'}
+                  </span>
+                  <ChevronRight size={10} className="ml-1 md:w-3 md:h-3" />
+                </Button>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Tasks & Calendar Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        {/* Tasks & To-Do List */}
+        <Card className="p-3 md:p-4">
+          <h3 className="text-base md:text-lg font-semibold mb-2 md:mb-3 flex items-center gap-2">
+            <ClockIcon size={16} className="md:w-[18px] md:h-[18px]" />
+            <span className="text-sm md:text-base">My Tasks & To-Do List</span>
+          </h3>
+          <div className="space-y-1.5 md:space-y-2 mb-3 md:mb-4 max-h-[400px] overflow-y-auto">
+            {tasks.slice(0, 5).map((task, idx) => (
+              <div key={idx} className="flex items-start gap-2 p-2 rounded-lg bg-white/5 border border-white/10">
+                <input type="checkbox" className="mt-0.5 md:mt-1 w-3.5 h-3.5 md:w-4 md:h-4" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs md:text-sm font-medium line-clamp-1">{task.title}</div>
+                  <div className="text-[10px] md:text-xs text-muted-foreground flex items-center gap-1.5 md:gap-2 mt-0.5 md:mt-1 flex-wrap">
+                    <span>Due: {task.dueDate ? task.dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}</span>
+                    <Badge variant={task.priority === 'HIGH' ? 'destructive' : 'warning'} className="text-[10px] md:text-xs px-1.5 py-0.5">
+                      {task.priority}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {/* Mock completed tasks */}
+            <div className="flex items-start gap-2 p-2 rounded-lg bg-green-500/10 border border-green-500/20 opacity-60">
+              <CheckCircle2 size={14} className="mt-0.5 md:mt-1 text-green-400 md:w-4 md:h-4" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs md:text-sm font-medium line-through line-clamp-1">Update contact information</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1">Completed: Dec 28, 2025</div>
+              </div>
+            </div>
+            <div className="flex items-start gap-2 p-2 rounded-lg bg-green-500/10 border border-green-500/20 opacity-60">
+              <CheckCircle2 size={14} className="mt-0.5 md:mt-1 text-green-400 md:w-4 md:h-4" />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs md:text-sm font-medium line-through line-clamp-1">Submit residence permit photos</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground mt-0.5 md:mt-1">Completed: Dec 20, 2025</div>
+              </div>
+            </div>
+          </div>
+          <div className="pt-2 md:pt-3 border-t border-white/10">
+            <div className="flex items-center justify-between text-[10px] md:text-xs mb-1.5 md:mb-2">
+              <span className="text-muted-foreground">{completedTasks} of {totalTasks} tasks completed</span>
+              <span className="font-semibold">{Math.round((completedTasks / totalTasks) * 100)}%</span>
+            </div>
+            <div className="w-full bg-white/10 rounded-full h-1.5 md:h-2">
+              <div 
+                className="bg-green-400 h-1.5 md:h-2 rounded-full transition-all"
+                style={{ width: `${(completedTasks / totalTasks) * 100}%` }}
+              />
+            </div>
+          </div>
+        </Card>
+
+        {/* Calendar View */}
+        <Card className="p-3 md:p-4">
+          <div className="flex items-center justify-between mb-2 md:mb-3">
+            <h3 className="text-base md:text-lg font-semibold flex items-center gap-2">
+              <CalendarIcon size={16} className="md:w-[18px] md:h-[18px]" />
+              <span className="text-sm md:text-base">My Upcoming Deadlines</span>
+            </h3>
+            <div className="flex items-center gap-1 md:gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="h-7 w-7 md:h-8 md:w-8 p-0">
+                <ChevronLeft size={14} className="md:w-4 md:h-4" />
+              </Button>
+              <span className="text-xs md:text-sm font-medium min-w-[100px] md:min-w-[120px] text-center">
+                {monthNames[currentMonth.getMonth()]} {currentMonth.getFullYear()}
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="h-7 w-7 md:h-8 md:w-8 p-0">
+                <ChevronRight size={14} className="md:w-4 md:h-4" />
+              </Button>
+            </div>
+          </div>
+          
+          {/* Calendar Grid */}
+          <div className="grid grid-cols-7 gap-0.5 md:gap-1 mb-2 md:mb-3">
+            {dayNames.map(day => (
+              <div key={day} className="text-[10px] md:text-xs text-center text-muted-foreground p-0.5 md:p-1 font-semibold">
+                {day}
+              </div>
+            ))}
+            {getDaysInMonth(currentMonth).map((day, idx) => {
+              const events = getEventsForDate(day || 0);
+              const isToday = day === new Date().getDate() && 
+                            currentMonth.getMonth() === new Date().getMonth() &&
+                            currentMonth.getFullYear() === new Date().getFullYear();
+              
+              return (
+                <div 
+                  key={idx} 
+                  className={`aspect-square p-0.5 md:p-1 text-[10px] md:text-xs ${
+                    !day ? 'bg-transparent' :
+                    isToday ? 'bg-primary/20 border border-primary rounded' :
+                    events.length > 0 ? 'bg-white/5 rounded' :
+                    'hover:bg-white/5 rounded'
+                  }`}
+                >
+                  {day && (
+                    <>
+                      <div className={`font-semibold ${isToday ? 'text-primary' : ''}`}>{day}</div>
+                      {events.map((event, eIdx) => {
+                        const days = calculateDaysUntilExpiry(event.expiryDate!);
+                        const isOverdue = days !== null && days < 0;
+                        const isUrgent = days !== null && days <= 14;
+                        return (
+                          <div 
+                            key={eIdx} 
+                            className={`text-[7px] md:text-[8px] mt-0.5 md:mt-1 p-0.5 md:p-1 rounded truncate ${
+                              isOverdue || isUrgent ? 'bg-red-500/50 text-white' :
+                              'bg-orange-500/50 text-white'
+                            }`}
+                            title={event.type}
+                          >
+                            {event.type}
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Timeline */}
+          <div className="pt-2 md:pt-3 border-t border-white/10">
+            <div className="space-y-1.5 md:space-y-2">
+              {upcomingDeadlines.slice(0, 4).map((deadline, idx) => {
+                const days = calculateDaysUntilExpiry(deadline.expiryDate!);
+                const isOverdue = days !== null && days < 0;
+                const isUrgent = days !== null && days <= 14;
+                return (
+                  <div key={idx} className="flex items-center gap-1.5 md:gap-2 text-[10px] md:text-xs">
+                    <div className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full flex-shrink-0 ${
+                      isOverdue || isUrgent ? 'bg-red-400' :
+                      days !== null && days <= 30 ? 'bg-orange-400' :
+                      'bg-green-400'
+                    }`} />
+                    <span className="text-muted-foreground flex-shrink-0">
+                      {new Date(deadline.expiryDate!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                    <span className="font-medium truncate">- {deadline.type}</span>
+                    <Badge variant={isOverdue || isUrgent ? 'destructive' : days !== null && days <= 30 ? 'warning' : 'default'} className="text-[9px] md:text-xs px-1.5 py-0.5 ml-auto flex-shrink-0">
+                      {isOverdue ? 'Overdue!' : isUrgent ? 'Action' : 'Safe'}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Notifications & Help Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+        {/* Notifications */}
+        <Card className="p-3 md:p-4">
+          <h3 className="text-base md:text-lg font-semibold mb-2 md:mb-3 flex items-center gap-2">
+            <AlertCircle size={16} className="md:w-[18px] md:h-[18px]" />
+            <span className="text-sm md:text-base">Notifications</span>
+          </h3>
+          <div className="space-y-1.5 md:space-y-2">
+            {notifications.slice(0, 3).map((notif, idx) => (
+              <div key={idx} className={`flex items-start gap-1.5 md:gap-2 p-2 rounded-lg ${
+                notif.type === 'error' ? 'bg-red-500/10 border border-red-500/20' :
+                'bg-orange-500/10 border border-orange-500/20'
+              }`}>
+                <AlertCircle size={14} className={`mt-0.5 flex-shrink-0 md:w-4 md:h-4 ${notif.type === 'error' ? 'text-red-400' : 'text-orange-400'}`} />
+                <div className="text-[10px] md:text-xs flex-1 leading-relaxed">{notif.message}</div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        {/* Help & Kuwait Law */}
+        <div className="space-y-3 md:space-y-4">
+          <Card className="p-3 md:p-4">
+            <h3 className="text-base md:text-lg font-semibold mb-2 md:mb-3 flex items-center gap-2">
+              <HelpCircle size={16} className="md:w-[18px] md:h-[18px]" />
+              <span className="text-sm md:text-base">Need Help?</span>
+            </h3>
+            <div className="space-y-1.5 md:space-y-2">
+              <Button variant="outline" size="sm" className="w-full justify-start text-xs md:text-sm h-8 md:h-9">
+                Contact HR Department
+              </Button>
+              <Button variant="outline" size="sm" className="w-full justify-start text-xs md:text-sm h-8 md:h-9">
+                View Renewal Guidelines
+              </Button>
+              <Button variant="outline" size="sm" className="w-full justify-start text-xs md:text-sm h-8 md:h-9">
+                Download Required Forms
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="p-3 md:p-4">
+            <h3 className="text-base md:text-lg font-semibold mb-2 md:mb-3 flex items-center gap-2">
+              <Globe size={16} className="md:w-[18px] md:h-[18px]" />
+              <span className="text-sm md:text-base">Kuwait Law Information</span>
+            </h3>
+            <div className="space-y-1.5 md:space-y-2">
+              <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-[10px] md:text-xs font-semibold mb-0.5 md:mb-1">6-Month Travel Limit</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Monitor your days outside Kuwait.</div>
+              </div>
+              <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-[10px] md:text-xs font-semibold mb-0.5 md:mb-1">Article 18 Requirements</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">Keep work permit current.</div>
+              </div>
+              <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-[10px] md:text-xs font-semibold mb-0.5 md:mb-1">Document Checklist</div>
+                <div className="text-[10px] md:text-xs text-muted-foreground">View required documents for renewal.</div>
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function EmployeeDetailPage() {
   const { t } = useTranslation();
@@ -765,6 +1270,35 @@ export default function EmployeeDetailPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Immigration Statistics - Only show if immigration data exists */}
+                    {immigration && (() => {
+                      const stats = calculateImmigrationStats(immigration);
+                      return (
+                        <div className="mt-4 pt-4 border-t border-white/10">
+                          <div className="flex items-center justify-between gap-4 flex-wrap">
+                            <div className="text-center">
+                              <div className="text-xs text-muted-foreground">Documents</div>
+                              <div className="text-lg font-bold">{stats.totalDocuments} Total</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-xs text-muted-foreground">Require Action</div>
+                              <div className="text-lg font-bold text-orange-400">{stats.requireAction}</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-xs text-muted-foreground">Valid</div>
+                              <div className="text-lg font-bold text-green-400">{stats.validDocuments}</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-xs text-muted-foreground">Next Deadline</div>
+                              <div className="text-xs font-bold text-red-400">
+                                {stats.nextDeadline ? new Date(stats.nextDeadline.expiryDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                 </div>
               </div>
             </CardContent>
@@ -1955,327 +2489,33 @@ export default function EmployeeDetailPage() {
 
         {/* Immigration Tab */}
         <TabsContent value="immigration" className="mt-6 space-y-6">
-          <Card className="overflow-hidden">
-            <CardHeader className="bg-gradient-to-r from-indigo-500/10 via-indigo-500/5 to-transparent border-b border-white/10">
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <Globe size={24} className="text-indigo-400" />
-                  Immigration & Residence Permit Management
-                </CardTitle>
-                <div className="flex items-center gap-2">
-                  {immigration && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsRenewalModalOpen(true)}
-                      className="gap-2"
-                    >
-                      <Calendar size={16} />
-                      Yearly Renewal
-                    </Button>
-                  )}
-                  <Button
-                    size="sm"
-                    onClick={() => setIsImmigrationModalOpen(true)}
-                    className="gap-2"
-                  >
-                    <Edit2 size={16} />
-                    {immigration ? 'Edit' : 'Add'} Immigration
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-6">
-              {!immigration ? (
+          {!immigration ? (
+            <Card className="overflow-hidden">
+              <CardContent className="p-6">
                 <div className="text-center py-12 text-muted-foreground">
                   <Globe size={64} className="mx-auto mb-4 opacity-50" />
                   <p className="text-lg mb-2">No immigration records found</p>
-                  <p className="text-sm">Immigration data will be displayed here once added</p>
-                  </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Next Renewal Alert */}
-                  {immigration.next_renewal_date && (
-                    <div className={`p-4 rounded-xl border-2 ${
-                      immigration.renewal_priority === 'Urgent' 
-                        ? 'bg-red-500/20 border-red-500/50' 
-                        : immigration.renewal_priority === 'High'
-                        ? 'bg-orange-500/20 border-orange-500/50'
-                        : 'bg-blue-500/20 border-blue-500/50'
-                    }`}>
-                      <div className="flex items-center gap-3">
-                        <AlertCircle size={24} className={
-                          immigration.renewal_priority === 'Urgent' ? 'text-red-400' : 
-                          immigration.renewal_priority === 'High' ? 'text-orange-400' : 'text-blue-400'
-                        } />
-                        <div className="flex-1">
-                          <p className="font-semibold">
-                            Next Renewal: {immigration.next_renewal_action || 'N/A'}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Due Date: {immigration.next_renewal_date ? new Date(immigration.next_renewal_date).toLocaleDateString('en-US', { 
-                              year: 'numeric', 
-                              month: 'long', 
-                              day: 'numeric' 
-                            }) : 'N/A'}
-                          </p>
-                  </div>
-                        <Badge variant={immigration.renewal_priority === 'Urgent' ? 'error' : immigration.renewal_priority === 'High' ? 'warning' : 'info'}>
-                          {immigration.renewal_priority || 'Normal'}
-                        </Badge>
-                  </div>
+                  <p className="text-sm mb-4">Immigration data will be displayed here once added</p>
+                  <Button onClick={() => setIsImmigrationModalOpen(true)}>
+                    <Plus size={16} className="mr-2" />
+                    Add Immigration Record
+                  </Button>
                 </div>
-                  )}
-
-                  {/* Work Permit Section */}
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-bold flex items-center gap-2">
-                      <FileCheck size={20} className="text-blue-400" />
-                      Work Permit (Public Authority for Manpower)
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/5 to-transparent border border-blue-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Work Permit Number</label>
-                        <p className="text-lg font-semibold mt-2">{immigration.work_permit_number || 'N/A'}</p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/5 to-transparent border border-blue-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
-                        <Badge variant={immigration.work_permit_status === 'Active' ? 'success' : 'warning'} className="mt-2">
-                          {immigration.work_permit_status || 'N/A'}
-                        </Badge>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/5 to-transparent border border-blue-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Issue Date</label>
-                        <p className="text-lg font-semibold mt-2">
-                          {immigration.work_permit_issue_date ? new Date(immigration.work_permit_issue_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/5 to-transparent border border-blue-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expiry Date</label>
-                        <p className="text-lg font-semibold mt-2">
-                          {immigration.work_permit_expiry_date ? new Date(immigration.work_permit_expiry_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/5 to-transparent border border-blue-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Last Renewed</label>
-                        <p className="text-lg font-semibold mt-2">
-                          {immigration.work_permit_last_renewed_date ? new Date(immigration.work_permit_last_renewed_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-blue-500/5 to-transparent border border-blue-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Next Renewal</label>
-                        <p className="text-lg font-semibold mt-2">
-                          {immigration.work_permit_next_renewal_date ? new Date(immigration.work_permit_next_renewal_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Residence Permit Section */}
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-bold flex items-center gap-2">
-                      <FileCheck size={20} className="text-purple-400" />
-                      Residence Permit (Article 18) - Ministry of Interior
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/5 to-transparent border border-purple-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Residence Permit Number</label>
-                        <p className="text-lg font-semibold mt-2">{immigration.residence_permit_number || 'N/A'}</p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/5 to-transparent border border-purple-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
-                        <Badge variant={immigration.residence_permit_status === 'Active' ? 'success' : 'warning'} className="mt-2">
-                          {immigration.residence_permit_status || 'N/A'}
-                        </Badge>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/5 to-transparent border border-purple-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Article</label>
-                        <p className="text-lg font-semibold mt-2">{immigration.residence_permit_article || 'Article 18'}</p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/5 to-transparent border border-purple-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Issue Date</label>
-                        <p className="text-lg font-semibold mt-2">
-                          {immigration.residence_permit_issue_date ? new Date(immigration.residence_permit_issue_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/5 to-transparent border border-purple-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expiry Date</label>
-                        <p className="text-lg font-semibold mt-2">
-                          {immigration.residence_permit_expiry_date ? new Date(immigration.residence_permit_expiry_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-purple-500/5 to-transparent border border-purple-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Last Renewed</label>
-                        <p className="text-lg font-semibold mt-2">
-                          {immigration.residence_permit_last_renewed_date ? new Date(immigration.residence_permit_last_renewed_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Passport Section */}
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-bold flex items-center gap-2">
-                      <FileCheck size={20} className="text-green-400" />
-                      Passport Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/5 to-transparent border border-green-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Passport Number</label>
-                        <p className="text-lg font-semibold mt-2">{immigration.passport_number || 'N/A'}</p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/5 to-transparent border border-green-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
-                        <Badge variant={immigration.passport_status === 'Valid' ? 'success' : 'warning'} className="mt-2">
-                          {immigration.passport_status || 'N/A'}
-                        </Badge>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/5 to-transparent border border-green-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Issue Country</label>
-                        <p className="text-lg font-semibold mt-2">{immigration.passport_issue_country || 'N/A'}</p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/5 to-transparent border border-green-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Issue Date</label>
-                        <p className="text-lg font-semibold mt-2">
-                          {immigration.passport_issue_date ? new Date(immigration.passport_issue_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/5 to-transparent border border-green-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expiry Date</label>
-                        <p className="text-lg font-semibold mt-2">
-                          {immigration.passport_expiry_date ? new Date(immigration.passport_expiry_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                      {immigration.passport_validity_days !== undefined && (
-                        <div className="p-4 rounded-lg bg-gradient-to-br from-green-500/5 to-transparent border border-green-500/10">
-                          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Validity Days</label>
-                          <p className="text-lg font-semibold mt-2">{immigration.passport_validity_days} days</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Health Insurance Section */}
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-bold flex items-center gap-2">
-                      <FileCheck size={20} className="text-cyan-400" />
-                      Health Insurance
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-cyan-500/5 to-transparent border border-cyan-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Insurance Number</label>
-                        <p className="text-lg font-semibold mt-2">{immigration.health_insurance_number || 'N/A'}</p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-cyan-500/5 to-transparent border border-cyan-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Provider</label>
-                        <p className="text-lg font-semibold mt-2">{immigration.health_insurance_provider || 'N/A'}</p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-cyan-500/5 to-transparent border border-cyan-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
-                        <Badge variant={immigration.health_insurance_status === 'Active' ? 'success' : 'warning'} className="mt-2">
-                          {immigration.health_insurance_status || 'N/A'}
-                        </Badge>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-cyan-500/5 to-transparent border border-cyan-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expiry Date</label>
-                        <p className="text-lg font-semibold mt-2">
-                          {immigration.health_insurance_expiry_date ? new Date(immigration.health_insurance_expiry_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Civil ID Section */}
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-bold flex items-center gap-2">
-                      <FileCheck size={20} className="text-orange-400" />
-                      Civil ID
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-orange-500/5 to-transparent border border-orange-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Civil ID Number</label>
-                        <p className="text-lg font-semibold mt-2">{immigration.civil_id_number || 'N/A'}</p>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-orange-500/5 to-transparent border border-orange-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</label>
-                        <Badge variant={immigration.civil_id_status === 'Valid' ? 'success' : 'warning'} className="mt-2">
-                          {immigration.civil_id_status || 'N/A'}
-                        </Badge>
-                      </div>
-                      <div className="p-4 rounded-lg bg-gradient-to-br from-orange-500/5 to-transparent border border-orange-500/10">
-                        <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expiry Date</label>
-                        <p className="text-lg font-semibold mt-2">
-                          {immigration.civil_id_expiry_date ? new Date(immigration.civil_id_expiry_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                      {immigration.civil_id_update_reason && (
-                        <div className="p-4 rounded-lg bg-gradient-to-br from-orange-500/5 to-transparent border border-orange-500/10">
-                          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Last Update Reason</label>
-                          <p className="text-lg font-semibold mt-2">{immigration.civil_id_update_reason}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* General Information */}
-                  {(immigration.visa_type || immigration.sponsor_name || immigration.entry_date) && (
-                    <div className="space-y-3">
-                      <h3 className="text-lg font-bold flex items-center gap-2">
-                        <Globe size={20} className="text-indigo-400" />
-                        General Information
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {immigration.visa_type && (
-                          <div className="p-4 rounded-lg bg-gradient-to-br from-indigo-500/5 to-transparent border border-indigo-500/10">
-                            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Visa Type</label>
-                            <p className="text-lg font-semibold mt-2">{immigration.visa_type}</p>
-                          </div>
-                        )}
-                        {immigration.sponsor_name && (
-                          <div className="p-4 rounded-lg bg-gradient-to-br from-indigo-500/5 to-transparent border border-indigo-500/10">
-                            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Sponsor</label>
-                            <p className="text-lg font-semibold mt-2">{immigration.sponsor_name}</p>
-                          </div>
-                        )}
-                        {immigration.entry_date && (
-                          <div className="p-4 rounded-lg bg-gradient-to-br from-indigo-500/5 to-transparent border border-indigo-500/10">
-                            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Entry Date</label>
-                            <p className="text-lg font-semibold mt-2">
-                              {new Date(immigration.entry_date).toLocaleDateString()}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Notes */}
-                  {immigration.notes && (
-                    <div className="p-4 rounded-lg bg-gradient-to-br from-slate-500/5 to-transparent border border-slate-500/10">
-                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Notes</label>
-                      <p className="text-base leading-relaxed">{immigration.notes}</p>
-                    </div>
-                  )}
-
-                  {/* Renewal Notes */}
-                  {immigration.renewal_notes && (
-                    <div className="p-4 rounded-lg bg-gradient-to-br from-yellow-500/5 to-transparent border border-yellow-500/20">
-                      <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 block flex items-center gap-2">
-                        <Clock size={14} />
-                        Renewal Notes
-                      </label>
-                      <p className="text-base leading-relaxed">{immigration.renewal_notes}</p>
-                      {immigration.last_renewal_processed_date && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Last processed: {new Date(immigration.last_renewal_processed_date).toLocaleString()}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : employee ? (
+            <AdminImmigrationView
+              immigration={immigration}
+              employee={employee}
+              onEdit={() => setIsImmigrationModalOpen(true)}
+              onRenewal={() => setIsRenewalModalOpen(true)}
+            />
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <Globe size={64} className="mx-auto mb-4 opacity-50" />
+              <p>Loading employee data...</p>
+            </div>
+          )}
         </TabsContent>
 
         {/* Attendance Location Tab */}
@@ -2750,7 +2990,7 @@ export default function EmployeeDetailPage() {
         title={immigration ? 'Edit Immigration Record' : 'Add Immigration Record'}
         size="xl"
       >
-        <div className="space-y-6 max-h-[80vh] overflow-y-auto">
+        <div className="space-y-6">
           {/* Work Permit Section */}
           <div className="space-y-4 p-4 border border-blue-500/20 rounded-lg bg-blue-500/5">
             <h3 className="font-semibold text-blue-400 flex items-center gap-2">

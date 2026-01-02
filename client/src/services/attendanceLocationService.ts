@@ -20,6 +20,7 @@ export interface EmployeeFaceImage {
   employee_id: string;
   face_image_url: string;
   face_encoding: string | null;
+  capture_angle?: string; // 'front', 'left', 'right', 'up', 'down'
   is_primary: boolean;
   captured_at: string;
   captured_via: string;
