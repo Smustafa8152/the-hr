@@ -544,6 +544,7 @@ export default function EmployeeProfilePage() {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [employeeShifts, setEmployeeShifts] = useState<EmployeeShift[]>([]);
   const [workingHours, setWorkingHours] = useState<EmployeeWorkingHours | null>(null);
+  const [reportingManagerChain, setReportingManagerChain] = useState<Employee[]>([]);
 
   useEffect(() => {
     loadEmployee();
@@ -558,6 +559,7 @@ export default function EmployeeProfilePage() {
       loadLeaveBalance();
       loadRequests();
       loadWorkingHours();
+      loadReportingManagerChain();
     }
   }, [employee?.id]);
 
@@ -674,6 +676,16 @@ export default function EmployeeProfilePage() {
       setWorkingHours(hours);
     } catch (error) {
       console.error('Failed to load working hours', error);
+    }
+  };
+
+  const loadReportingManagerChain = async () => {
+    if (!employee?.id) return;
+    try {
+      const chain = await employeeService.getFullReportingHierarchy(employee.id);
+      setReportingManagerChain(chain);
+    } catch (error) {
+      console.error('Failed to load reporting manager chain', error);
     }
   };
 
@@ -951,6 +963,42 @@ export default function EmployeeProfilePage() {
                   <div className="text-xs text-muted-foreground mb-1">{t('employees.workLocation')}</div>
                   <Badge variant="outline" className="mt-1">{emp.work_location || 'N/A'}</Badge>
                 </div>
+                {/* Reporting Manager Chain */}
+                {reportingManagerChain.length > 0 && (
+                  <div className="md:col-span-2 p-3 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                    <div className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                      <Shield size={12} className="text-purple-400" />
+                      Reporting Manager Chain
+                    </div>
+                    <div className="space-y-2">
+                      {reportingManagerChain.map((manager, index) => (
+                        <div key={manager.id} className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                            {manager.avatar_url && manager.avatar_url !== `https://ui-avatars.com/api/?name=${manager.first_name}+${manager.last_name}` ? (
+                              <img src={manager.avatar_url} alt="" className="w-full h-full object-cover rounded-lg" />
+                            ) : (
+                              <span className="text-xs font-bold text-purple-400">
+                                {(manager.first_name || manager.firstName || 'U')[0]}{(manager.last_name || manager.lastName || 'N')[0]}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold truncate">
+                              {manager.first_name || manager.firstName} {manager.last_name || manager.lastName}
+                              {index === 0 && <span className="ml-1 text-xs text-muted-foreground">(You)</span>}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {(manager as any).jobs?.name || manager.position || manager.designation || 'N/A'}
+                            </p>
+                          </div>
+                          {index < reportingManagerChain.length - 1 && (
+                            <ChevronRight size={14} className="text-muted-foreground flex-shrink-0" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </AccordionContent>
           </AccordionItem>

@@ -379,5 +379,55 @@ export const employeeService = {
       console.error('Error deleting employee:', error);
       throw error;
     }
+  },
+
+  /**
+   * Get reporting manager chain (hierarchy) for an employee
+   * Recursively fetches all managers up the chain
+   */
+  async getReportingManagerChain(employeeId: string, maxDepth: number = 10): Promise<Employee[]> {
+    const chain: Employee[] = [];
+    const visited = new Set<string>(); // Prevent circular references
+    let currentEmployeeId: string | null = employeeId;
+    let depth = 0;
+
+    while (currentEmployeeId && depth < maxDepth && !visited.has(currentEmployeeId)) {
+      visited.add(currentEmployeeId);
+      
+      try {
+        const employee = await this.getById(currentEmployeeId);
+        if (!employee) break;
+
+        // Add to chain if it's not the starting employee
+        if (currentEmployeeId !== employeeId) {
+          chain.push(employee);
+        }
+
+        // Move to next manager
+        currentEmployeeId = employee.reporting_manager_id || null;
+        depth++;
+      } catch (error) {
+        console.error('Error fetching reporting manager chain:', error);
+        break;
+      }
+    }
+
+    return chain;
+  },
+
+  /**
+   * Get full reporting hierarchy including the employee and all managers
+   */
+  async getFullReportingHierarchy(employeeId: string): Promise<Employee[]> {
+    try {
+      const employee = await this.getById(employeeId);
+      if (!employee) return [];
+
+      const chain = await this.getReportingManagerChain(employeeId);
+      return [employee, ...chain];
+    } catch (error) {
+      console.error('Error fetching full reporting hierarchy:', error);
+      return [];
+    }
   }
 };
