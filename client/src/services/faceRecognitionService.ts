@@ -260,57 +260,63 @@ export async function getFaceDescriptor(imageData: string): Promise<Float32Array
 
 /**
  * Compare two face descriptors using Euclidean distance
+ * face-api.js descriptors are already normalized, so we use Euclidean distance directly
  * Returns confidence score (0-100)
- * Improved algorithm for better robustness to distance and lighting changes
+ * 
+ * According to face-api.js documentation:
+ * - Distance < 0.4 = very high confidence (same person)
+ * - Distance < 0.6 = high confidence (same person)
+ * - Distance 0.6-0.8 = medium confidence (possibly same person)
+ * - Distance > 0.8 = low confidence (different person)
  */
 export function compareFaces(
   descriptor1: Float32Array,
   descriptor2: Float32Array
 ): number {
-  // Normalize descriptors first (L2 normalization)
-  // This makes comparison more robust to lighting and distance changes
-  let norm1 = 0;
-  let norm2 = 0;
-  for (let i = 0; i < descriptor1.length; i++) {
-    norm1 += descriptor1[i] * descriptor1[i];
-  }
-  for (let i = 0; i < descriptor2.length; i++) {
-    norm2 += descriptor2[i] * descriptor2[i];
-  }
-  norm1 = Math.sqrt(norm1);
-  norm2 = Math.sqrt(norm2);
-
-  // Calculate cosine similarity (dot product of normalized vectors)
-  // This is more robust than Euclidean distance for face recognition
-  let dotProduct = 0;
+  // Calculate Euclidean distance between descriptors
+  // face-api.js descriptors are already L2-normalized, so we can use Euclidean distance directly
+  let distance = 0;
   for (let i = 0; i < descriptor1.length && i < descriptor2.length; i++) {
-    dotProduct += (descriptor1[i] / norm1) * (descriptor2[i] / norm2);
+    const diff = descriptor1[i] - descriptor2[i];
+    distance += diff * diff;
   }
+  distance = Math.sqrt(distance);
 
-  // Cosine similarity ranges from -1 to 1, but for faces it's typically 0.5 to 1.0
-  // Convert to confidence score (0-100)
-  // Typical face matches: 0.6-0.7 = good match, 0.7-0.8 = very good, 0.8+ = excellent
-  // Map cosine similarity to confidence: 0.5 -> 0%, 0.6 -> 50%, 0.7 -> 75%, 0.8 -> 90%, 1.0 -> 100%
+  // Log the distance for debugging
+  console.log(`[Face Comparison] Euclidean distance: ${distance.toFixed(4)}`);
+
+  // Convert distance to confidence score (0-100)
+  // Lower distance = higher confidence
+  // Use strict thresholds based on face-api.js recommendations
   let confidence = 0;
-  if (dotProduct >= 0.8) {
-    // Excellent match: 0.8-1.0 maps to 90-100%
-    confidence = 90 + (dotProduct - 0.8) * 50; // 90% to 100%
-  } else if (dotProduct >= 0.7) {
-    // Very good match: 0.7-0.8 maps to 75-90%
-    confidence = 75 + (dotProduct - 0.7) * 150; // 75% to 90%
-  } else if (dotProduct >= 0.6) {
-    // Good match: 0.6-0.7 maps to 50-75%
-    confidence = 50 + (dotProduct - 0.6) * 250; // 50% to 75%
-  } else if (dotProduct >= 0.5) {
-    // Fair match: 0.5-0.6 maps to 0-50%
-    confidence = (dotProduct - 0.5) * 500; // 0% to 50%
+  
+  if (distance <= 0.4) {
+    // Very high confidence: distance 0.0-0.4 maps to 90-100%
+    // This is a very strong match
+    confidence = 90 + (1 - (distance / 0.4)) * 10; // 90% to 100%
+  } else if (distance <= 0.5) {
+    // High confidence: distance 0.4-0.5 maps to 80-90%
+    confidence = 80 + (1 - ((distance - 0.4) / 0.1)) * 10; // 80% to 90%
+  } else if (distance <= 0.6) {
+    // Good confidence: distance 0.5-0.6 maps to 65-80%
+    // This is the typical threshold for face-api.js
+    confidence = 65 + (1 - ((distance - 0.5) / 0.1)) * 15; // 65% to 80%
+  } else if (distance <= 0.7) {
+    // Medium confidence: distance 0.6-0.7 maps to 40-65%
+    confidence = 40 + (1 - ((distance - 0.6) / 0.1)) * 25; // 40% to 65%
+  } else if (distance <= 0.8) {
+    // Low confidence: distance 0.7-0.8 maps to 15-40%
+    confidence = 15 + (1 - ((distance - 0.7) / 0.1)) * 25; // 15% to 40%
   } else {
-    // Poor match: < 0.5
-    confidence = 0;
+    // Very low confidence: distance > 0.8 maps to 0-15%
+    // Different person
+    confidence = Math.max(0, 15 - ((distance - 0.8) / 0.2) * 15); // 15% to 0%
   }
 
   // Clamp to 0-100
   confidence = Math.max(0, Math.min(100, confidence));
+  
+  console.log(`[Face Comparison] Confidence: ${confidence.toFixed(2)}%`);
   
   return confidence;
 }
@@ -517,9 +523,9 @@ export const faceRecognitionService = {
         }
       }
 
-      // Lower threshold to 60% for better recognition across different conditions
-      // The improved cosine similarity algorithm should provide more accurate confidence scores
-      const verificationThreshold = 60; // 60% confidence threshold
+      // Use stricter threshold: 65% confidence (corresponds to ~0.6 Euclidean distance)
+      // This is the standard face-api.js threshold for face matching
+      const verificationThreshold = 65; // 65% confidence threshold (Euclidean distance ~0.6)
       
       console.log(`[Face Verification] Best confidence: ${bestConfidence.toFixed(2)}%, threshold: ${verificationThreshold}%, verified: ${bestConfidence >= verificationThreshold}`);
       
