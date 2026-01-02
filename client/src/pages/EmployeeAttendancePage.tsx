@@ -4,18 +4,29 @@ import { MapPin, Camera, CheckCircle, XCircle, AlertCircle, Loader2, Clock, Hist
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '../components/common/UIComponents';
 import Modal from '../components/common/Modal';
 import { attendanceLocationService, AttendanceLocationSettings } from '../services/attendanceLocationService';
+import { employeeAttendanceLocationService, EmployeeAttendanceLocation } from '../services/employeeAttendanceLocationService';
 import { faceRecognitionService, captureFaceFromVideo } from '../services/faceRecognitionService';
 import { attendanceService, AttendanceLog } from '../services/attendanceService';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 import { StatusBadge } from '../components/common/StatusBadge';
-import { StatusBadge } from '../components/common/StatusBadge';
+import { Label } from '../components/ui/label';
+import { Input } from '../components/ui/input';
 
 export default function EmployeeAttendancePage() {
   const { t } = useTranslation();
   const { user } = useAuth();
   const [locationSettings, setLocationSettings] = useState<AttendanceLocationSettings | null>(null);
+  const [employeeLocation, setEmployeeLocation] = useState<EmployeeAttendanceLocation | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [isLocationSettingsModalOpen, setIsLocationSettingsModalOpen] = useState(false);
+  const [locationForm, setLocationForm] = useState({
+    location_name: '',
+    google_maps_link: '',
+    radius_meters: 100,
+    is_active: true,
+    use_company_default: true
+  });
   const [locationVerified, setLocationVerified] = useState<boolean>(false);
   const [distance, setDistance] = useState<number | null>(null);
   const [faceVerified, setFaceVerified] = useState<boolean>(false);
@@ -27,6 +38,7 @@ export default function EmployeeAttendancePage() {
   const [isAttendanceLogModalOpen, setIsAttendanceLogModalOpen] = useState<boolean>(false);
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
   const [loadingLogs, setLoadingLogs] = useState<boolean>(false);
+  const [cameraReady, setCameraReady] = useState<boolean>(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -36,17 +48,32 @@ export default function EmployeeAttendancePage() {
       loadLocationSettings();
       checkFaceImage();
     }
+    if (user?.employee_id) {
+      loadEmployeeLocation();
+    }
     return () => {
       // Cleanup video stream
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
     };
-  }, [user?.company_id]);
+  }, [user?.company_id, user?.employee_id]);
 
   useEffect(() => {
     // Start camera when face capture modal opens
     if (isFaceCaptureModalOpen) {
+      setCameraReady(false);
+      startCamera();
+    } else {
+      // Stop camera when modal closes
+      stopCamera();
+    }
+  }, [isFaceCaptureModalOpen]);
+
+  useEffect(() => {
+    // Start camera when face capture modal opens
+    if (isFaceCaptureModalOpen) {
+      setCameraReady(false);
       startCamera();
     } else {
       // Stop camera when modal closes
@@ -62,6 +89,25 @@ export default function EmployeeAttendancePage() {
     } catch (error) {
       console.error('Error loading location settings:', error);
       toast.error('Failed to load attendance location settings');
+    }
+  };
+
+  const loadEmployeeLocation = async () => {
+    if (!user?.employee_id) return;
+    try {
+      const location = await employeeAttendanceLocationService.getByEmployee(user.employee_id);
+      setEmployeeLocation(location);
+      if (location) {
+        setLocationForm({
+          location_name: location.location_name,
+          google_maps_link: location.google_maps_link || '',
+          radius_meters: location.radius_meters,
+          is_active: location.is_active,
+          use_company_default: location.use_company_default
+        });
+      }
+    } catch (error) {
+      console.error('Error loading employee location:', error);
     }
   };
 
@@ -118,7 +164,12 @@ export default function EmployeeAttendancePage() {
 
   const verifyLocation = async () => {
     try {
-      if (!locationSettings || !locationSettings.latitude || !locationSettings.longitude) {
+      // Determine which location to use: employee-specific or company default
+      const activeLocation = employeeLocation && !employeeLocation.use_company_default && employeeLocation.is_active
+        ? employeeLocation
+        : locationSettings;
+
+      if (!activeLocation || !activeLocation.latitude || !activeLocation.longitude) {
         toast.error('Attendance location not configured');
         return;
       }
@@ -132,9 +183,9 @@ export default function EmployeeAttendancePage() {
       const verification = attendanceLocationService.verifyLocation(
         location.lat,
         location.lon,
-        locationSettings.latitude,
-        locationSettings.longitude,
-        locationSettings.radius_meters
+        activeLocation.latitude,
+        activeLocation.longitude,
+        activeLocation.radius_meters
       );
 
       setDistance(verification.distance);
@@ -143,7 +194,7 @@ export default function EmployeeAttendancePage() {
       toast.dismiss('location-verification');
 
       if (!verification.verified) {
-        toast.error(`You are ${verification.distance.toFixed(0)}m away from the office. Please move closer.`, {
+        toast.error(`You are ${verification.distance.toFixed(0)}m away from the location. Please move closer.`, {
           duration: 5000
         });
       } else {
@@ -172,8 +223,47 @@ export default function EmployeeAttendancePage() {
     }
   };
 
+  const handleSaveEmployeeLocation = async () => {
+    if (!user?.employee_id) return;
+    try {
+      // Parse Google Maps link to extract coordinates
+      let latitude: number | null = null;
+      let longitude: number | null = null;
+
+      if (locationForm.google_maps_link && !locationForm.use_company_default) {
+        const coords = await attendanceLocationService.parseGoogleMapsLink(locationForm.google_maps_link);
+        if (coords) {
+          latitude = coords.latitude;
+          longitude = coords.longitude;
+        } else {
+          toast.error('Could not parse Google Maps link. Please ensure it contains coordinates.');
+          return;
+        }
+      }
+
+      await employeeAttendanceLocationService.upsert({
+        employee_id: user.employee_id,
+        location_name: locationForm.location_name,
+        google_maps_link: locationForm.use_company_default ? null : (locationForm.google_maps_link || null),
+        latitude,
+        longitude,
+        radius_meters: locationForm.radius_meters,
+        is_active: locationForm.is_active,
+        use_company_default: locationForm.use_company_default
+      });
+
+      toast.success('Attendance location saved successfully!');
+      setIsLocationSettingsModalOpen(false);
+      loadEmployeeLocation();
+    } catch (error: any) {
+      console.error('Failed to save attendance location', error);
+      toast.error(error.message || 'Failed to save attendance location');
+    }
+  };
+
   const startCamera = async () => {
     try {
+      setCameraReady(false);
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'user',
@@ -185,11 +275,24 @@ export default function EmployeeAttendancePage() {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
+        
+        // Wait for video to be ready
+        videoRef.current.onloadedmetadata = () => {
+          if (videoRef.current) {
+            videoRef.current.play().then(() => {
+              setCameraReady(true);
+            }).catch((error) => {
+              console.error('Error playing video:', error);
+              setCameraReady(false);
+            });
+          }
+        };
       }
     } catch (error: any) {
       console.error('Error accessing camera:', error);
       toast.error('Failed to access camera. Please allow camera permissions.');
       setIsFaceCaptureModalOpen(false);
+      setCameraReady(false);
     }
   };
 
@@ -201,6 +304,7 @@ export default function EmployeeAttendancePage() {
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setCameraReady(false);
   };
 
   const captureFace = async () => {
@@ -280,21 +384,26 @@ export default function EmployeeAttendancePage() {
       return;
     }
 
-    // Verify location if required
-    if (locationSettings?.is_active) {
-      if (!locationVerified) {
-        toast.error('Please verify your location first');
-        return;
-      }
-    }
+      // Determine which location settings to use
+      const activeSettings = employeeLocation && !employeeLocation.use_company_default && employeeLocation.is_active
+        ? { ...locationSettings, latitude: employeeLocation.latitude, longitude: employeeLocation.longitude, radius_meters: employeeLocation.radius_meters, is_active: employeeLocation.is_active }
+        : locationSettings;
 
-    // Verify face if required
-    if (locationSettings?.require_face_verification && locationSettings?.face_recognition_enabled) {
-      if (!faceVerified && hasFaceImage) {
-        toast.error('Please verify your face first');
-        return;
+      // Verify location if required
+      if (activeSettings?.is_active) {
+        if (!locationVerified) {
+          toast.error('Please verify your location first');
+          return;
+        }
       }
-    }
+
+      // Verify face if required (use company settings for face recognition)
+      if (locationSettings?.require_face_verification && locationSettings?.face_recognition_enabled) {
+        if (!faceVerified && hasFaceImage) {
+          toast.error('Please verify your face first');
+          return;
+        }
+      }
 
     try {
       setIsSubmitting(true);
@@ -327,7 +436,7 @@ export default function EmployeeAttendancePage() {
       if (userLocation) {
         attendanceData.latitude = userLocation.lat;
         attendanceData.longitude = userLocation.lon;
-        if (locationSettings && locationSettings.latitude && locationSettings.longitude) {
+        if (activeLocation && activeLocation.latitude && activeLocation.longitude) {
           attendanceData.distance_from_location_meters = distance;
         }
       }
@@ -363,7 +472,12 @@ export default function EmployeeAttendancePage() {
     }
   };
 
-  if (!locationSettings) {
+  // Determine which location to display
+  const activeLocation = employeeLocation && !employeeLocation.use_company_default && employeeLocation.is_active
+    ? employeeLocation
+    : locationSettings;
+
+  if (!activeLocation && !locationSettings) {
     return (
       <div className="p-8 text-center">
         <AlertCircle className="mx-auto mb-4 text-muted-foreground" size={48} />
@@ -385,12 +499,30 @@ export default function EmployeeAttendancePage() {
         <CardContent>
           <div className="space-y-4">
             <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-              <div className="flex items-center gap-2 mb-2">
-                <MapPin size={18} className="text-blue-400" />
-                <span className="font-semibold">{locationSettings.location_name}</span>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <MapPin size={18} className="text-blue-400" />
+                  <span className="font-semibold">
+                    {activeLocation?.location_name || locationSettings?.location_name || 'Location'}
+                    {employeeLocation && !employeeLocation.use_company_default && (
+                      <Badge variant="outline" className="ml-2 text-xs">Custom</Badge>
+                    )}
+                  </span>
+                </div>
+                <Button
+                  onClick={() => setIsLocationSettingsModalOpen(true)}
+                  variant="ghost"
+                  size="sm"
+                >
+                  <MapPin size={16} className="mr-1" />
+                  {employeeLocation ? 'Edit' : 'Set'} Location
+                </Button>
               </div>
               <p className="text-sm text-muted-foreground">
-                Allowed radius: {locationSettings.radius_meters}m
+                Allowed radius: {activeLocation?.radius_meters || locationSettings?.radius_meters || 100}m
+                {employeeLocation?.use_company_default && (
+                  <span className="ml-2">(Using company default)</span>
+                )}
               </p>
             </div>
 
@@ -538,7 +670,15 @@ export default function EmployeeAttendancePage() {
         size="lg"
       >
         <div className="space-y-4">
-          <div className="relative bg-black rounded-lg overflow-hidden">
+          {!cameraReady && (
+            <div className="flex items-center justify-center py-12 bg-black rounded-lg">
+              <div className="text-center">
+                <Loader2 size={32} className="animate-spin text-primary mx-auto mb-4" />
+                <p className="text-muted-foreground">Starting camera...</p>
+              </div>
+            </div>
+          )}
+          <div className={`relative bg-black rounded-lg overflow-hidden ${!cameraReady ? 'hidden' : ''}`}>
             <video
               ref={videoRef}
               autoPlay
@@ -546,6 +686,19 @@ export default function EmployeeAttendancePage() {
               muted
               className="w-full"
               style={{ maxHeight: '500px', objectFit: 'contain' }}
+              onLoadedMetadata={() => {
+                if (videoRef.current) {
+                  videoRef.current.play().then(() => {
+                    setCameraReady(true);
+                  }).catch((error) => {
+                    console.error('Error playing video:', error);
+                    setCameraReady(false);
+                  });
+                }
+              }}
+              onCanPlay={() => {
+                setCameraReady(true);
+              }}
             />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="border-2 border-primary rounded-lg" style={{ width: '250px', height: '300px' }} />
@@ -563,13 +716,18 @@ export default function EmployeeAttendancePage() {
           <div className="flex gap-3">
             <Button
               onClick={captureFace}
-              disabled={isCapturing || !videoRef.current?.srcObject}
+              disabled={isCapturing || !cameraReady}
               className="flex-1"
             >
               {isCapturing ? (
                 <>
                   <Loader2 size={18} className="mr-2 animate-spin" />
                   Processing...
+                </>
+              ) : !cameraReady ? (
+                <>
+                  <Loader2 size={18} className="mr-2 animate-spin" />
+                  Starting Camera...
                 </>
               ) : (
                 <>
@@ -677,6 +835,114 @@ export default function EmployeeAttendancePage() {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* Employee Location Settings Modal */}
+      <Modal
+        isOpen={isLocationSettingsModalOpen}
+        onClose={() => {
+          setIsLocationSettingsModalOpen(false);
+          loadEmployeeLocation();
+        }}
+        title="Set Your Attendance Location"
+        size="lg"
+      >
+        <form onSubmit={(e) => { e.preventDefault(); handleSaveEmployeeLocation(); }} className="space-y-4">
+          <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <p className="text-sm text-blue-400">
+              Set a dedicated location for your attendance. If not set, the company default location will be used.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Use Company Default Location</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={locationForm.use_company_default}
+                onChange={(e) => setLocationForm({ ...locationForm, use_company_default: e.target.checked })}
+                className="w-5 h-5 rounded border-white/20"
+              />
+              <span className="text-sm text-muted-foreground">
+                Use the company's default attendance location
+              </span>
+            </div>
+          </div>
+
+          {!locationForm.use_company_default && (
+            <>
+              <div className="space-y-2">
+                <Label>Location Name *</Label>
+                <Input
+                  required={!locationForm.use_company_default}
+                  value={locationForm.location_name}
+                  onChange={(e) => setLocationForm({ ...locationForm, location_name: e.target.value })}
+                  placeholder="My Work Location"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Google Maps Link *</Label>
+                <Input
+                  required={!locationForm.use_company_default}
+                  value={locationForm.google_maps_link}
+                  onChange={(e) => setLocationForm({ ...locationForm, google_maps_link: e.target.value })}
+                  placeholder="https://maps.app.goo.gl/..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Paste a Google Maps link. The system will automatically extract coordinates.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Allowed Radius (meters) *</Label>
+                <Input
+                  type="number"
+                  required={!locationForm.use_company_default}
+                  min="10"
+                  max="1000"
+                  value={locationForm.radius_meters}
+                  onChange={(e) => setLocationForm({ ...locationForm, radius_meters: parseInt(e.target.value) || 100 })}
+                  placeholder="100"
+                />
+                <p className="text-xs text-muted-foreground">
+                  You must be within this radius to mark attendance (10-1000 meters)
+                </p>
+              </div>
+            </>
+          )}
+
+          <div className="space-y-2 pt-4 border-t border-white/10">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Active</Label>
+                <p className="text-xs text-muted-foreground">
+                  Enable or disable this location setting
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={locationForm.is_active}
+                onChange={(e) => setLocationForm({ ...locationForm, is_active: e.target.checked })}
+                className="w-5 h-5 rounded border-white/20"
+              />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-white/10 flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsLocationSettingsModalOpen(false);
+                loadEmployeeLocation();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit">Save Location</Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

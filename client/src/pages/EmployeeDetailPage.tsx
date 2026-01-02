@@ -8,6 +8,8 @@ import { documentService, Document } from '../services/documentService';
 import { employeeEducationService, EmployeeEducation } from '../services/employeeEducationService';
 import { employeeBankDetailsService, EmployeeBankDetails } from '../services/employeeBankDetailsService';
 import { employeeImmigrationService, EmployeeImmigration } from '../services/employeeImmigrationService';
+import { employeeAttendanceLocationService, EmployeeAttendanceLocation } from '../services/employeeAttendanceLocationService';
+import { attendanceLocationService } from '../services/attendanceLocationService';
 import { getEmployeeLeaveBalance, LeaveBalance } from '../services/leaveBalanceService';
 import { employeeRequestService, EmployeeRequest } from '../services/employeeRequestService';
 import { documentRequestService, DocumentRequest } from '../services/documentRequestService';
@@ -75,6 +77,15 @@ export default function EmployeeDetailPage() {
     currency: 'USD',
     notes: ''
   });
+  const [employeeAttendanceLocation, setEmployeeAttendanceLocation] = useState<EmployeeAttendanceLocation | null>(null);
+  const [isAttendanceLocationModalOpen, setIsAttendanceLocationModalOpen] = useState(false);
+  const [attendanceLocationForm, setAttendanceLocationForm] = useState({
+    location_name: '',
+    google_maps_link: '',
+    radius_meters: 100,
+    is_active: true,
+    use_company_default: true
+  });
 
   useEffect(() => {
     if (params?.id) {
@@ -94,6 +105,9 @@ export default function EmployeeDetailPage() {
     }
     if (employee?.id && activeTab === 'immigration') {
       loadImmigration();
+    }
+    if (employee?.id && activeTab === 'attendance-location') {
+      loadEmployeeAttendanceLocation();
     }
     if (employee?.id && activeTab === 'leave-balance') {
       loadLeaveBalance();
@@ -308,6 +322,73 @@ export default function EmployeeDetailPage() {
     } catch (error) {
       console.error('Failed to load immigration data', error);
       toast.error('Failed to load immigration data');
+    }
+  };
+
+  const loadEmployeeAttendanceLocation = async () => {
+    if (!employee?.id) return;
+    try {
+      const location = await employeeAttendanceLocationService.getByEmployee(employee.id);
+      setEmployeeAttendanceLocation(location);
+      if (location) {
+        setAttendanceLocationForm({
+          location_name: location.location_name,
+          google_maps_link: location.google_maps_link || '',
+          radius_meters: location.radius_meters,
+          is_active: location.is_active,
+          use_company_default: location.use_company_default
+        });
+      } else {
+        // Reset form if no location exists
+        setAttendanceLocationForm({
+          location_name: '',
+          google_maps_link: '',
+          radius_meters: 100,
+          is_active: true,
+          use_company_default: true
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load employee attendance location', error);
+      toast.error('Failed to load attendance location');
+    }
+  };
+
+  const handleSaveAttendanceLocation = async () => {
+    if (!employee?.id) return;
+    try {
+      // Parse Google Maps link to extract coordinates
+      let latitude: number | null = null;
+      let longitude: number | null = null;
+
+      if (attendanceLocationForm.google_maps_link && !attendanceLocationForm.use_company_default) {
+        const coords = await attendanceLocationService.parseGoogleMapsLink(attendanceLocationForm.google_maps_link);
+        if (coords) {
+          latitude = coords.latitude;
+          longitude = coords.longitude;
+        } else {
+          toast.error('Could not parse Google Maps link. Please ensure it contains coordinates.');
+          return;
+        }
+      }
+
+      await employeeAttendanceLocationService.upsert({
+        employee_id: employee.id,
+        location_name: attendanceLocationForm.location_name,
+        google_maps_link: attendanceLocationForm.use_company_default ? null : (attendanceLocationForm.google_maps_link || null),
+        latitude,
+        longitude,
+        radius_meters: attendanceLocationForm.radius_meters,
+        is_active: attendanceLocationForm.is_active,
+        use_company_default: attendanceLocationForm.use_company_default
+      });
+
+      toast.success('Attendance location saved successfully!');
+      setIsAttendanceLocationModalOpen(false);
+      loadEmployeeAttendanceLocation();
+    } catch (error: any) {
+      console.error('Failed to save attendance location', error);
+      toast.error(error.message || 'Failed to save attendance location');
     }
   };
 
@@ -749,6 +830,12 @@ export default function EmployeeDetailPage() {
               className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
             >
               Immigration
+            </TabsTrigger>
+            <TabsTrigger 
+              value="attendance-location" 
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-primary/80 data-[state=active]:text-white data-[state=active]:shadow-lg text-xs px-3 py-2 rounded-lg transition-all duration-200"
+            >
+              Attendance Location
             </TabsTrigger>
             <TabsTrigger 
               value="requests" 
@@ -2191,6 +2278,88 @@ export default function EmployeeDetailPage() {
           </Card>
         </TabsContent>
 
+        {/* Attendance Location Tab */}
+        <TabsContent value="attendance-location" className="mt-6 space-y-6">
+          <Card className="overflow-hidden">
+            <CardHeader className="bg-gradient-to-r from-blue-500/10 via-blue-500/5 to-transparent border-b border-white/10">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <MapPin size={24} className="text-blue-400" />
+                  Attendance Location Settings
+                </CardTitle>
+                <Button
+                  onClick={() => setIsAttendanceLocationModalOpen(true)}
+                  size="sm"
+                  className="gap-2"
+                >
+                  <Edit2 size={16} />
+                  {employeeAttendanceLocation ? 'Edit' : 'Add'} Location
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              {!employeeAttendanceLocation ? (
+                <div className="text-center py-12">
+                  <MapPin className="mx-auto mb-4 text-muted-foreground" size={64} />
+                  <p className="text-lg mb-2">No attendance location configured</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {employeeAttendanceLocation?.use_company_default 
+                      ? 'Using company default location'
+                      : 'Configure a dedicated location for this employee'}
+                  </p>
+                  <Button onClick={() => setIsAttendanceLocationModalOpen(true)}>
+                    Configure Location
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-semibold text-lg">{employeeAttendanceLocation.location_name}</h3>
+                      <Badge variant={employeeAttendanceLocation.is_active ? 'success' : 'outline'}>
+                        {employeeAttendanceLocation.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
+                    {employeeAttendanceLocation.use_company_default ? (
+                      <div className="text-sm text-muted-foreground">
+                        Using company default location settings
+                      </div>
+                    ) : (
+                      <div className="space-y-2 text-sm">
+                        {employeeAttendanceLocation.latitude && employeeAttendanceLocation.longitude && (
+                          <div>
+                            <span className="text-muted-foreground">Coordinates: </span>
+                            <span className="font-mono">
+                              {employeeAttendanceLocation.latitude.toFixed(6)}, {employeeAttendanceLocation.longitude.toFixed(6)}
+                            </span>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-muted-foreground">Allowed Radius: </span>
+                          <span className="font-semibold">{employeeAttendanceLocation.radius_meters}m</span>
+                        </div>
+                        {employeeAttendanceLocation.google_maps_link && (
+                          <div>
+                            <span className="text-muted-foreground">Google Maps: </span>
+                            <a
+                              href={employeeAttendanceLocation.google_maps_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              View on Maps
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Documents Tab */}
         <TabsContent value="documents" className="mt-6">
           <Card>
@@ -2969,6 +3138,108 @@ export default function EmployeeDetailPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Attendance Location Modal */}
+      <Modal
+        isOpen={isAttendanceLocationModalOpen}
+        onClose={() => {
+          setIsAttendanceLocationModalOpen(false);
+          loadEmployeeAttendanceLocation();
+        }}
+        title="Employee Attendance Location Settings"
+        size="lg"
+      >
+        <form onSubmit={(e) => { e.preventDefault(); handleSaveAttendanceLocation(); }} className="space-y-4">
+          <div className="space-y-2">
+            <Label>Use Company Default Location</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={attendanceLocationForm.use_company_default}
+                onChange={(e) => setAttendanceLocationForm({ ...attendanceLocationForm, use_company_default: e.target.checked })}
+                className="w-5 h-5 rounded border-white/20"
+              />
+              <span className="text-sm text-muted-foreground">
+                Use the company's default attendance location instead of a custom location
+              </span>
+            </div>
+          </div>
+
+          {!attendanceLocationForm.use_company_default && (
+            <>
+              <div className="space-y-2">
+                <Label>Location Name *</Label>
+                <Input
+                  required={!attendanceLocationForm.use_company_default}
+                  value={attendanceLocationForm.location_name}
+                  onChange={(e) => setAttendanceLocationForm({ ...attendanceLocationForm, location_name: e.target.value })}
+                  placeholder="Employee's Work Location"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Google Maps Link *</Label>
+                <Input
+                  required={!attendanceLocationForm.use_company_default}
+                  value={attendanceLocationForm.google_maps_link}
+                  onChange={(e) => setAttendanceLocationForm({ ...attendanceLocationForm, google_maps_link: e.target.value })}
+                  placeholder="https://maps.app.goo.gl/..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Paste a Google Maps link. The system will automatically extract coordinates.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Allowed Radius (meters) *</Label>
+                <Input
+                  type="number"
+                  required={!attendanceLocationForm.use_company_default}
+                  min="10"
+                  max="1000"
+                  value={attendanceLocationForm.radius_meters}
+                  onChange={(e) => setAttendanceLocationForm({ ...attendanceLocationForm, radius_meters: parseInt(e.target.value) || 100 })}
+                  placeholder="100"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Employee must be within this radius to mark attendance (10-1000 meters)
+                </p>
+              </div>
+            </>
+          )}
+
+          <div className="space-y-2 pt-4 border-t border-white/10">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Active</Label>
+                <p className="text-xs text-muted-foreground">
+                  Enable or disable this location setting
+                </p>
+              </div>
+              <input
+                type="checkbox"
+                checked={attendanceLocationForm.is_active}
+                onChange={(e) => setAttendanceLocationForm({ ...attendanceLocationForm, is_active: e.target.checked })}
+                className="w-5 h-5 rounded border-white/20"
+              />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-white/10 flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setIsAttendanceLocationModalOpen(false);
+                loadEmployeeAttendanceLocation();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="submit">Save Settings</Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );
